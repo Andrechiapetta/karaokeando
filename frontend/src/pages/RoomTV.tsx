@@ -1,0 +1,1007 @@
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import {
+  connectWS,
+  finalizeSong,
+  getState,
+  moveQueueItem,
+  nextSong,
+  queueItemToTop,
+  removeQueueItem,
+  scoreDone,
+} from "../api";
+import ScoreOverlay from "../components/ScoreOverlay";
+
+// Declare global YouTube IFrame API types
+declare global {
+  interface Window {
+    YT?: {
+      Player: new (
+        el: HTMLElement | string,
+        opts: {
+          videoId: string;
+          width?: string | number;
+          height?: string | number;
+          playerVars?: Record<string, number | string>;
+          events?: {
+            onReady?: (e: { target: YTPlayer }) => void;
+            onStateChange?: (e: { data: number; target: YTPlayer }) => void;
+          };
+        }
+      ) => YTPlayer;
+      PlayerState: { ENDED: number; PLAYING: number };
+    };
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+interface YTPlayer {
+  destroy: () => void;
+  playVideo: () => void;
+  pauseVideo: () => void;
+  getPlayerState: () => number;
+}
+
+interface QueueItem {
+  id: string;
+  videoId: string;
+  title: string;
+  requestedBy: string;
+  singers?: { id: string; name: string }[];
+}
+
+interface DuetRankingEntry {
+  names: [string, string];
+  score: number;
+  count: number;
+}
+
+interface RankingEntry {
+  name: string;
+  score: number;
+}
+
+interface RoomState {
+  roomCode: string;
+  nowPlaying: QueueItem | null;
+  queue: QueueItem[];
+  ranking: Record<string, RankingEntry>;
+  duetRanking: DuetRankingEntry[];
+  showingScore: boolean;
+}
+
+type RankingView = "solo" | "duet";
+
+interface FinalizedEvent {
+  singer: string;
+  score: number;
+  title: string;
+}
+
+// Icon components
+const IconChevronUp = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="18 15 12 9 6 15"></polyline>
+  </svg>
+);
+
+const IconChevronDown = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="6 9 12 15 18 9"></polyline>
+  </svg>
+);
+
+const IconChevronsUp = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="17 11 12 6 7 11"></polyline>
+    <polyline points="17 18 12 13 7 18"></polyline>
+  </svg>
+);
+
+const IconTrash = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"></polyline>
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+  </svg>
+);
+
+const IconMusic = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 18V5l12-2v13"></path>
+    <circle cx="6" cy="18" r="3"></circle>
+    <circle cx="18" cy="16" r="3"></circle>
+  </svg>
+);
+
+const IconMic = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+    <line x1="12" y1="19" x2="12" y2="23"></line>
+    <line x1="8" y1="23" x2="16" y2="23"></line>
+  </svg>
+);
+
+const IconX = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18"></line>
+    <line x1="6" y1="6" x2="18" y2="18"></line>
+  </svg>
+);
+
+const IconTrophy = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+    <path d="M4 22h16"></path>
+    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path>
+    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path>
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+  </svg>
+);
+
+const IconUsers = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+    <circle cx="9" cy="7" r="4"></circle>
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+  </svg>
+);
+
+const IconUser = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+    <circle cx="12" cy="7" r="4"></circle>
+  </svg>
+);
+
+const IconPlay = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+  </svg>
+);
+
+const IconSkipForward = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <polygon points="5 4 15 12 5 20 5 4"></polygon>
+    <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2"></line>
+  </svg>
+);
+
+export default function RoomTV() {
+  const { code } = useParams<{ code: string }>();
+  const [state, setState] = useState<RoomState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [finalized, setFinalized] = useState<FinalizedEvent | null>(null);
+  const [rankingView, setRankingView] = useState<RankingView>("solo");
+  const [autoRotate, setAutoRotate] = useState(true);
+  const wsRef = useRef<WebSocket | null>(null);
+  const playerRef = useRef<YTPlayer | null>(null);
+  const playerContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-rotate ranking view every 10 seconds
+  useEffect(() => {
+    if (!autoRotate) return;
+    const interval = setInterval(() => {
+      setRankingView(prev => prev === "solo" ? "duet" : "solo");
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [autoRotate]);
+
+  const handleQueueRemove = useCallback(
+    async (itemId: string) => {
+      if (!code) return;
+      await removeQueueItem(code, itemId).catch(() => {});
+    },
+    [code]
+  );
+
+  const handleQueueMove = useCallback(
+    async (itemId: string, direction: "up" | "down") => {
+      if (!code) return;
+      await moveQueueItem(code, itemId, direction).catch(() => {});
+    },
+    [code]
+  );
+
+  const handleQueueToTop = useCallback(
+    async (itemId: string) => {
+      if (!code) return;
+      await queueItemToTop(code, itemId).catch(() => {});
+    },
+    [code]
+  );
+  const [ytReady, setYtReady] = useState(!!window.YT);
+
+  // Truncated text with tooltip on hover
+  const TruncatedText = ({ 
+    text, 
+    maxLength, 
+    style 
+  }: { 
+    text: string; 
+    maxLength: number; 
+    style?: React.CSSProperties;
+  }) => {
+    const [showTooltip, setShowTooltip] = useState(false);
+    const needsTruncation = text.length > maxLength;
+    const displayText = needsTruncation ? text.slice(0, maxLength).trim() + "..." : text;
+
+    if (!needsTruncation) {
+      return <span style={style}>{text}</span>;
+    }
+
+    return (
+      <span 
+        style={{ position: "relative", cursor: "pointer", ...style }}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
+        {displayText}
+        {showTooltip && (
+          <span
+            style={{
+              position: "absolute",
+              bottom: "100%",
+              left: 0,
+              marginBottom: 8,
+              padding: "10px 14px",
+              background: "#222",
+              border: "1px solid #444",
+              borderRadius: 8,
+              fontSize: "0.9rem",
+              color: "#fff",
+              whiteSpace: "normal",
+              wordBreak: "break-word",
+              zIndex: 1000,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+              minWidth: 250,
+              maxWidth: 400,
+            }}
+          >
+            {text}
+          </span>
+        )}
+      </span>
+    );
+  };
+
+  // Derive values from state (safe even when state is null)
+  const videoId = state?.nowPlaying?.videoId ?? null;
+  const showScore = !!finalized;
+
+  // Auto-finalize when YouTube video ends
+  const handleVideoEnd = useCallback(async () => {
+    if (!code) return;
+    console.log("[TV] Video ended, auto-finalizing");
+    try {
+      await finalizeSong(code, "Auto");
+    } catch (err) {
+      console.error("[TV] finalize error", err);
+    }
+  }, [code]);
+
+  // Load YouTube IFrame API once
+  useEffect(() => {
+    if (window.YT) {
+      setYtReady(true);
+      return;
+    }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      prev?.();
+      setYtReady(true);
+    };
+    if (!document.getElementById("yt-iframe-api")) {
+      const tag = document.createElement("script");
+      tag.id = "yt-iframe-api";
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+    }
+  }, []);
+
+  // Connect to room via WS + HTTP fallback
+  useEffect(() => {
+    if (!code) return;
+
+    const startTime = performance.now();
+    
+    // Fallback: fetch state via HTTP in case WS is slow
+    getState(code)
+      .then(s => {
+        const elapsed = Math.round(performance.now() - startTime);
+        console.log(`[TV] HTTP state received in ${elapsed}ms`, s);
+        if (s && s.error === "room_not_found") {
+          setError("Sala não encontrada. Verifique o código.");
+        } else if (s && !s.error) {
+          setState(s);
+        }
+      })
+      .catch((err) => {
+        console.error("[TV] HTTP state error", err);
+      });
+
+    const ws = connectWS(code, "tv", "TV", (msg: unknown) => {
+      const m = msg as {
+        type: string;
+        state?: RoomState;
+        singer?: string;
+        score?: number;
+        title?: string;
+        error?: string;
+        action?: string;
+      };
+      if (m.type === "STATE" && m.state) {
+        // Don't update state while showing score to avoid re-triggering
+        setFinalized(prev => {
+          if (!prev) {
+            setState(m.state!);
+          }
+          return prev;
+        });
+      } else if (m.type === "ERROR" && m.error === "room_not_found") {
+        setError("Sala não encontrada. Verifique o código.");
+      } else if (m.type === "FINALIZED") {
+        console.log("[TV] FINALIZED", m);
+        setFinalized({ singer: m.singer!, score: m.score!, title: m.title! });
+      } else if (m.type === "PLAYER_COMMAND") {
+        // Remote control from mobile
+        console.log("[TV] PLAYER_COMMAND", m.action);
+        if (playerRef.current) {
+          if (m.action === "play") {
+            playerRef.current.playVideo();
+          } else if (m.action === "pause") {
+            playerRef.current.pauseVideo();
+          }
+        }
+      }
+    });
+    wsRef.current = ws;
+
+    return () => ws.close();
+  }, [code]);
+
+  // Create / destroy YouTube player
+  useEffect(() => {
+    console.log("[TV] Player effect", {
+      ytReady,
+      videoId,
+      showScore,
+      hasContainer: !!playerContainerRef.current,
+    });
+
+    // Cleanup old player when videoId changes or score shown
+    if (playerRef.current) {
+      console.log("[TV] Destroying old player");
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+
+    if (!ytReady || !videoId || showScore) {
+      console.log("[TV] Skipping player creation", {
+        ytReady,
+        videoId,
+        showScore,
+      });
+      return;
+    }
+
+    // Wait a tick for the container to be rendered
+    const timeoutId = setTimeout(() => {
+      const container = playerContainerRef.current;
+      if (!container) {
+        console.log("[TV] Container not found, retrying...");
+        return;
+      }
+
+      console.log("[TV] Creating player for", videoId);
+
+      // Clear container
+      container.innerHTML = "";
+      const div = document.createElement("div");
+      div.id = "yt-player-" + videoId;
+      container.appendChild(div);
+
+      playerRef.current = new window.YT!.Player(div.id, {
+        videoId,
+        width: "100%",
+        height: "100%",
+        playerVars: {
+          autoplay: 1,
+          rel: 0,
+          modestbranding: 1,
+          start: 0,
+          playsinline: 1,
+          enablejsapi: 1,
+        },
+        events: {
+          onReady: e => {
+            console.log("[TV] Player ready, calling playVideo");
+            // Force play on ready (some browsers block autoplay)
+            e.target.playVideo();
+          },
+          onStateChange: e => {
+            console.log("[TV] Player state changed", e.data);
+            if (e.data === window.YT!.PlayerState.ENDED) {
+              handleVideoEnd();
+            }
+          },
+        },
+      });
+    }, 100); // Small delay to ensure DOM is ready
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+    };
+  }, [ytReady, videoId, showScore, handleVideoEnd]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────
+
+  if (error) {
+    return (
+      <div
+        className="container"
+        style={{ paddingTop: 60, textAlign: "center" }}
+      >
+        <h2 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <IconX size={24} /> {error}
+        </h2>
+        <p style={{ color: "#888", marginTop: 16 }}>
+          Volte e crie uma nova sala.
+        </p>
+        <a
+          href="/"
+          style={{ color: "#3498db", marginTop: 20, display: "inline-block" }}
+        >
+          ← Voltar ao início
+        </a>
+      </div>
+    );
+  }
+
+  if (!state) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#fff",
+        }}
+      >
+        <div style={{ 
+          fontSize: 48, 
+          marginBottom: 24,
+          animation: "pulse 1.5s ease-in-out infinite",
+        }}>
+          <IconMic size={64} />
+        </div>
+        <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 500 }}>
+          Conectando à sala {code}...
+        </h2>
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.95); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* ─────────────────────────────────────────────────────────────
+          MODO 1: TELA CHEIA - Quando está tocando música
+          ───────────────────────────────────────────────────────────── */}
+      {state.nowPlaying && !showScore && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "#000",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Barra superior com info da música */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              padding: "12px 20px",
+              background:
+                "linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)",
+              zIndex: 10,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+                <TruncatedText text={state.nowPlaying.title} maxLength={60} />
+              </div>
+              <div style={{ opacity: 0.7, fontSize: "0.9rem", display: "flex", alignItems: "center", gap: 6 }}>
+                <IconMic size={14} />
+                {state.nowPlaying.singers?.map(s => typeof s === "string" ? s : s.name).join(" e ") ||
+                  state.nowPlaying.requestedBy}
+              </div>
+            </div>
+            <div
+              style={{ textAlign: "right", opacity: 0.6, fontSize: "0.85rem" }}
+            >
+              <div>Sala {code}</div>
+              {state.queue.length > 0 && (
+                <div>
+                  Próxima:{" "}
+                  {state.queue[0].singers?.map(s => typeof s === "string" ? s : s.name).join(" e ") ||
+                    state.queue[0].requestedBy}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Player YouTube em tela cheia */}
+          <div
+            ref={playerContainerRef}
+            style={{
+              flex: 1,
+              width: "100%",
+              height: "100%",
+            }}
+          />
+
+          {/* Botão de pular discreto no canto */}
+          <button
+            onClick={() => code && finalizeSong(code, "Host")}
+            style={{
+              position: "absolute",
+              bottom: 20,
+              right: 20,
+              background: "rgba(255,255,255,0.1)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              padding: "8px 16px",
+              fontSize: "0.85rem",
+              opacity: 0.5,
+              transition: "opacity 0.2s",
+              zIndex: 10,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              Pular <IconSkipForward size={16} />
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODO 2: LOBBY - Entre músicas (fila, ranking, QR code)
+          ───────────────────────────────────────────────────────────── */}
+      {!state.nowPlaying && !showScore && (
+        <div
+          style={{
+            minHeight: "100vh",
+            padding: 40,
+            background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 40,
+            }}
+          >
+            <h1 style={{ margin: 0, fontSize: "2rem", display: "flex", alignItems: "center", gap: 12 }}>
+              <IconMic size={32} /> Karaokê - Sala {code}
+            </h1>
+            <div
+              style={{
+                background: "white",
+                padding: 16,
+                borderRadius: 12,
+                textAlign: "center",
+              }}
+            >
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(
+                  window.location.origin + "/join/" + code
+                )}`}
+                alt="QR Code"
+                loading="lazy"
+                style={{ display: "block", marginBottom: 8, width: 120, height: 120 }}
+              />
+              <div
+                style={{ color: "#000", fontSize: "0.8rem", fontWeight: 600 }}
+              >
+                Escaneie para entrar
+              </div>
+            </div>
+          </div>
+
+          {/* Conteúdo principal */}
+          <div
+            style={{
+              flex: 1,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 40,
+              alignItems: "start",
+            }}
+          >
+            {/* Próxima música / Fila */}
+            <div>
+              {state.queue.length > 0 ? (
+                <>
+                  <div
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #7c4dff 0%, #ff4081 100%)",
+                      borderRadius: 16,
+                      padding: 32,
+                      marginBottom: 24,
+                      textAlign: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "1rem",
+                        opacity: 0.9,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><IconMusic size={16} /> Próxima música</span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "1.8rem",
+                        fontWeight: 700,
+                        marginBottom: 12,
+                      }}
+                    >
+                      {state.queue[0].title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "1.2rem",
+                        opacity: 0.9,
+                        marginBottom: 24,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <IconMic size={20} />
+                      {state.queue[0].singers?.map(s => typeof s === "string" ? s : s.name).join(" e ") ||
+                        state.queue[0].requestedBy}
+                    </div>
+                    <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                      <button
+                        onClick={() => code && nextSong(code)}
+                        style={{
+                          background: "white",
+                          color: "#7c4dff",
+                          fontSize: "1.3rem",
+                          padding: "16px 48px",
+                          fontWeight: 700,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <IconPlay size={20} /> Começar!
+                      </button>
+                      <button
+                        onClick={() => handleQueueRemove(state.queue[0].id)}
+                        style={{
+                          background: "rgba(255,255,255,0.15)",
+                          padding: "16px 22px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        title="Remover da fila"
+                      >
+                        <IconTrash size={24} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {state.queue.length > 1 && (
+                    <div className="card" style={{ padding: 20 }}>
+                      <h3 style={{ margin: "0 0 16px", fontSize: "1.1rem" }}>
+                        Na fila ({state.queue.length - 1} mais)
+                      </h3>
+                      {state.queue.slice(1, 6).map((item, i) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            padding: "10px 0",
+                            borderBottom:
+                              i < Math.min(state.queue.length - 2, 4)
+                                ? "1px solid #333"
+                                : "none",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                          }}
+                        >
+                          <span style={{ flex: 1 }}>
+                            <TruncatedText text={item.title} maxLength={40} />
+                          </span>
+                          <span style={{ color: "#888", whiteSpace: "nowrap" }}>
+                            {item.singers?.map(s => typeof s === "string" ? s : s.name).join(" e ") || item.requestedBy}
+                          </span>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button
+                              onClick={() => handleQueueMove(item.id, "up")}
+                              style={{ padding: "6px 8px", background: "#333", display: "flex", alignItems: "center" }}
+                              title="Subir"
+                            >
+                              <IconChevronUp />
+                            </button>
+                            <button
+                              onClick={() => handleQueueMove(item.id, "down")}
+                              style={{ padding: "6px 8px", background: "#333", display: "flex", alignItems: "center" }}
+                              title="Descer"
+                            >
+                              <IconChevronDown />
+                            </button>
+                            <button
+                              onClick={() => handleQueueToTop(item.id)}
+                              style={{ padding: "6px 8px", background: "#333", display: "flex", alignItems: "center" }}
+                              title="Mover para o topo"
+                            >
+                              <IconChevronsUp />
+                            </button>
+                            <button
+                              onClick={() => handleQueueRemove(item.id)}
+                              style={{ padding: "6px 8px", background: "rgba(180,60,60,0.9)", display: "flex", alignItems: "center" }}
+                              title="Remover"
+                            >
+                              <IconTrash />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {state.queue.length > 6 && (
+                        <div style={{ color: "#888", marginTop: 8 }}>
+                          ... e mais {state.queue.length - 6}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div
+                  className="card"
+                  style={{
+                    padding: 48,
+                    textAlign: "center",
+                    background: "rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <div style={{ fontSize: "4rem", marginBottom: 16, display: "flex", justifyContent: "center" }}>
+                    <IconMusic size={64} />
+                  </div>
+                  <h2 style={{ margin: "0 0 12px" }}>Fila vazia</h2>
+                  <p style={{ color: "#888", fontSize: "1.1rem" }}>
+                    Escaneie o QR code e adicione músicas!
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Ranking */}
+            <div className="card" style={{ padding: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <h2 style={{ margin: 0, fontSize: "1.5rem", display: "flex", alignItems: "center", gap: 10 }}>
+                  <IconTrophy size={28} /> Ranking
+                </h2>
+                {/* Toggle Solo/Duplas */}
+                <div style={{ 
+                  display: "flex", 
+                  gap: 4, 
+                  background: "#222",
+                  borderRadius: 8,
+                  padding: 4,
+                }}>
+                  <button
+                    onClick={() => { setRankingView("solo"); setAutoRotate(false); }}
+                    style={{
+                      padding: "6px 12px",
+                      background: rankingView === "solo" ? "#ff4081" : "transparent",
+                      border: "none",
+                      borderRadius: 6,
+                      color: "#fff",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <IconUser size={14} /> Solo
+                  </button>
+                  <button
+                    onClick={() => { setRankingView("duet"); setAutoRotate(false); }}
+                    style={{
+                      padding: "6px 12px",
+                      background: rankingView === "duet" ? "#ff4081" : "transparent",
+                      border: "none",
+                      borderRadius: 6,
+                      color: "#fff",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <IconUsers size={14} /> Duplas
+                  </button>
+                </div>
+              </div>
+
+              {rankingView === "solo" ? (
+                // Solo ranking
+                Object.keys(state.ranking).length === 0 ? (
+                  <p style={{ color: "#888", fontSize: "1.1rem" }}>
+                    Ninguém pontuou ainda.
+                    <br />
+                    Cante uma música para aparecer aqui!
+                  </p>
+                ) : (
+                  <div>
+                    {Object.entries(state.ranking)
+                      .sort(([, a], [, b]) => b.score - a.score)
+                      .map(([odUserId, entry], i) => (
+                        <div
+                          key={odUserId}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "12px 0",
+                            borderBottom: "1px solid #333",
+                            fontSize: i < 3 ? "1.2rem" : "1rem",
+                          }}
+                        >
+                          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: "50%",
+                                background: i === 0 ? "#f1c40f" : i === 1 ? "#bdc3c7" : i === 2 ? "#cd6133" : "#555",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "0.85rem",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {i + 1}
+                            </span>
+                            {entry.name}
+                          </span>
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color: i === 0 ? "#ffd700" : "inherit",
+                            }}
+                          >
+                            {entry.score} pts
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )
+              ) : (
+                // Duet ranking
+                !state.duetRanking || state.duetRanking.length === 0 ? (
+                  <p style={{ color: "#888", fontSize: "1.1rem" }}>
+                    Nenhuma dupla pontuou ainda.
+                    <br />
+                    Cante em dupla para aparecer aqui!
+                  </p>
+                ) : (
+                  <div>
+                    {[...state.duetRanking]
+                      .sort((a, b) => b.score - a.score)
+                      .map((duet, i) => (
+                        <div
+                          key={duet.names.join("-")}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            padding: "12px 0",
+                            borderBottom: "1px solid #333",
+                            fontSize: i < 3 ? "1.2rem" : "1rem",
+                          }}
+                        >
+                          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: "50%",
+                                background: i === 0 ? "#f1c40f" : i === 1 ? "#bdc3c7" : i === 2 ? "#cd6133" : "#555",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "0.85rem",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {i + 1}
+                            </span>
+                            {duet.names[0]} & {duet.names[1]}
+                          </span>
+                          <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                color: i === 0 ? "#ffd700" : "inherit",
+                              }}
+                            >
+                              {duet.score} pts
+                            </span>
+                            <span style={{ fontSize: "0.8rem", color: "#888" }}>
+                              {duet.count} música{duet.count > 1 ? "s" : ""}
+                            </span>
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Score Overlay (aparece após cada música) */}
+      <ScoreOverlay
+        open={!!finalized}
+        scoreOverride={finalized?.score}
+        singer={finalized?.singer}
+        enableAudio={true}
+        onDone={async () => {
+          setFinalized(null);
+          if (code) {
+            // Fetch latest state since we ignored updates during score
+            try {
+              const s = await getState(code);
+              if (s && !s.error) setState(s);
+            } catch {}
+            scoreDone(code);
+          }
+        }}
+      />
+    </>
+  );
+}

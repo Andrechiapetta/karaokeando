@@ -1,0 +1,8 @@
+Place these files here (copy from PiKaraoke):
+- score-drums.mp3
+- applause-l.mp3
+- applause-m.mp3
+- applause-h.mp3
+
+Source in this repo:
+- pikaraoke/static/sounds/

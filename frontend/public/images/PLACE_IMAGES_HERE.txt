@@ -1,0 +1,5 @@
+Place these files here (copy from PiKaraoke):
+- stage.jpg
+
+Source in this repo:
+- pikaraoke/static/images/stage.jpg
