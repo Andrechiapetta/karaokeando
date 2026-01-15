@@ -44,12 +44,12 @@ frontend/
 
 ## 📱 Páginas
 
-| Rota | Componente | Descrição |
-|------|------------|-----------|
-| `/` | Home | Criar sala ou entrar em sala existente |
-| `/room/:code` | RoomMobile | Controle pelo celular (busca, fila, ranking) |
-| `/room/:code/tv` | RoomTV | Exibição principal (TV com som) |
-| `/dashboard` | Dashboard | Painel de analytics e gestão |
+| Rota             | Componente | Descrição                                    |
+| ---------------- | ---------- | -------------------------------------------- |
+| `/`              | Home       | Criar sala ou entrar em sala existente       |
+| `/room/:code`    | RoomMobile | Controle pelo celular (busca, fila, ranking) |
+| `/room/:code/tv` | RoomTV     | Exibição principal (TV com som)              |
+| `/dashboard`     | Dashboard  | Painel de analytics e gestão                 |
 
 ## 🔧 Scripts
 
@@ -62,6 +62,7 @@ npm run preview  # Preview do build
 ## 🎨 Funcionalidades da UI
 
 ### RoomMobile (Celular)
+
 - **Aba Fila**: Ver música atual, próximas, controles de play/pause
 - **Aba Músicas**: Biblioteca salva, mais tocadas, busca YouTube
 - **Aba Ranking**: Ranking solo e de duplas
@@ -69,6 +70,7 @@ npm run preview  # Preview do build
 - Tooltip para títulos longos truncados
 
 ### RoomTV (TV)
+
 - Player YouTube em tela cheia
 - Overlay de pontuação com efeitos visuais
 - Fila lateral com controles de ordenação
@@ -77,6 +79,7 @@ npm run preview  # Preview do build
 ## 🔌 Comunicação com Backend
 
 O arquivo `api.ts` gerencia:
+
 - **REST API** - Chamadas HTTP para ações (criar sala, adicionar música, etc)
 - **WebSocket** - Conexão real-time para sincronização de estado
 - **localStorage** - Persistência de userId e nome do usuário

@@ -90,23 +90,25 @@ Aplicação em `http://localhost:3000`
 ## 🛠️ Stack Tecnológica
 
 ### Backend
-| Tecnologia | Uso |
-|------------|-----|
-| Node.js | Runtime |
-| TypeScript | Tipagem |
-| Fastify | Framework HTTP |
-| @fastify/websocket | Comunicação real-time |
-| yt-dlp | Busca no YouTube |
-| *(Em breve)* Prisma | ORM |
-| *(Em breve)* PostgreSQL | Banco de dados |
+
+| Tecnologia              | Uso                   |
+| ----------------------- | --------------------- |
+| Node.js                 | Runtime               |
+| TypeScript              | Tipagem               |
+| Fastify                 | Framework HTTP        |
+| @fastify/websocket      | Comunicação real-time |
+| yt-dlp                  | Busca no YouTube      |
+| _(Em breve)_ Prisma     | ORM                   |
+| _(Em breve)_ PostgreSQL | Banco de dados        |
 
 ### Frontend
-| Tecnologia | Uso |
-|------------|-----|
-| React 18 | UI Library |
-| TypeScript | Tipagem |
-| Vite | Build tool |
-| React Router | Navegação |
+
+| Tecnologia   | Uso        |
+| ------------ | ---------- |
+| React 18     | UI Library |
+| TypeScript   | Tipagem    |
+| Vite         | Build tool |
+| React Router | Navegação  |
 
 ## 📁 Estrutura de Dados (Atual)
 
@@ -129,6 +131,7 @@ database/
 ```
 
 **Entidades planejadas:**
+
 - `User` - Usuários cadastrados
 - `Room` - Salas de karaokê
 - `Session` - Sessões/festas
@@ -154,12 +157,12 @@ JWT_SECRET=sua-chave-secreta
 
 ## 📱 Rotas da Aplicação
 
-| Rota | Descrição |
-|------|-----------|
-| `/` | Home - Criar ou entrar em sala |
-| `/room/:code` | Modo Mobile - Controle pelo celular |
-| `/room/:code/tv` | Modo TV - Exibição principal |
-| `/dashboard` | Painel administrativo |
+| Rota             | Descrição                           |
+| ---------------- | ----------------------------------- |
+| `/`              | Home - Criar ou entrar em sala      |
+| `/room/:code`    | Modo Mobile - Controle pelo celular |
+| `/room/:code/tv` | Modo TV - Exibição principal        |
+| `/dashboard`     | Painel administrativo               |
 
 ## 🤝 Contribuindo
 

@@ -31,48 +31,48 @@ backend/
 
 ### Salas
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/rooms` | Criar nova sala |
-| GET | `/api/rooms/:code/state` | Estado atual da sala |
-| GET | `/api/rooms/:code/participants` | Lista de participantes |
+| Método | Rota                            | Descrição              |
+| ------ | ------------------------------- | ---------------------- |
+| POST   | `/api/rooms`                    | Criar nova sala        |
+| GET    | `/api/rooms/:code/state`        | Estado atual da sala   |
+| GET    | `/api/rooms/:code/participants` | Lista de participantes |
 
 ### Fila de Músicas
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/rooms/:code/enqueue` | Adicionar música à fila |
-| POST | `/api/rooms/:code/next` | Pular para próxima música |
-| POST | `/api/rooms/:code/finalize` | Finalizar e pontuar |
-| DELETE | `/api/rooms/:code/queue/:id` | Remover da fila |
-| POST | `/api/rooms/:code/queue/:id/move` | Mover na fila |
-| POST | `/api/rooms/:code/queue/:id/top` | Mover para o topo |
+| Método | Rota                              | Descrição                 |
+| ------ | --------------------------------- | ------------------------- |
+| POST   | `/api/rooms/:code/enqueue`        | Adicionar música à fila   |
+| POST   | `/api/rooms/:code/next`           | Pular para próxima música |
+| POST   | `/api/rooms/:code/finalize`       | Finalizar e pontuar       |
+| DELETE | `/api/rooms/:code/queue/:id`      | Remover da fila           |
+| POST   | `/api/rooms/:code/queue/:id/move` | Mover na fila             |
+| POST   | `/api/rooms/:code/queue/:id/top`  | Mover para o topo         |
 
 ### Biblioteca
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/library` | Listar músicas salvas |
-| DELETE | `/api/library/:id` | Remover música |
-| GET | `/api/library/top` | Músicas mais tocadas |
+| Método | Rota               | Descrição             |
+| ------ | ------------------ | --------------------- |
+| GET    | `/api/library`     | Listar músicas salvas |
+| DELETE | `/api/library/:id` | Remover música        |
+| GET    | `/api/library/top` | Músicas mais tocadas  |
 
 ### Busca
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/youtube/search?q=` | Buscar no YouTube |
+| Método | Rota                     | Descrição         |
+| ------ | ------------------------ | ----------------- |
+| GET    | `/api/youtube/search?q=` | Buscar no YouTube |
 
 ### Usuários
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/rooms/:code/update-name` | Atualizar nome do usuário |
+| Método | Rota                           | Descrição                 |
+| ------ | ------------------------------ | ------------------------- |
+| POST   | `/api/rooms/:code/update-name` | Atualizar nome do usuário |
 
 ### WebSocket
 
-| Rota | Descrição |
-|------|-----------|
-| `ws://localhost:8787/ws/:code?mode=tv` | Conexão modo TV |
+| Rota                                                         | Descrição           |
+| ------------------------------------------------------------ | ------------------- |
+| `ws://localhost:8787/ws/:code?mode=tv`                       | Conexão modo TV     |
 | `ws://localhost:8787/ws/:code?mode=mobile&name=X&odUserId=Y` | Conexão modo Mobile |
 
 ## 📡 Eventos WebSocket
@@ -97,6 +97,7 @@ backend/
 ## 🗄️ Estrutura de Dados (Atual)
 
 ### RoomState
+
 ```typescript
 interface RoomState {
   code: string;
@@ -110,6 +111,7 @@ interface RoomState {
 ```
 
 ### QueueItem
+
 ```typescript
 interface QueueItem {
   id: string;
@@ -123,12 +125,14 @@ interface QueueItem {
 ## 🗃️ Migração para PostgreSQL (Planejado)
 
 ### Instalação do Prisma
+
 ```bash
 npm install prisma @prisma/client
 npx prisma init
 ```
 
 ### Schema (Planejado)
+
 ```prisma
 model User {
   id        String   @id @default(uuid())
@@ -193,12 +197,14 @@ DASHBOARD_KEY=sua-chave-admin
 ## 📦 Dependências
 
 ### Produção
+
 - `fastify` - Framework HTTP rápido
 - `@fastify/cors` - CORS middleware
 - `@fastify/websocket` - Suporte WebSocket
-- *(Em breve)* `@prisma/client` - Cliente do banco
+- _(Em breve)_ `@prisma/client` - Cliente do banco
 
 ### Desenvolvimento
+
 - `tsx` - Executor TypeScript
 - `typescript` - Compilador
 
