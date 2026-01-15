@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   connectWS,
   finalizeSong,
@@ -80,33 +80,78 @@ interface FinalizedEvent {
 
 // Icon components
 const IconChevronUp = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <polyline points="18 15 12 9 6 15"></polyline>
   </svg>
 );
 
 const IconChevronDown = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <polyline points="6 9 12 15 18 9"></polyline>
   </svg>
 );
 
 const IconChevronsUp = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <polyline points="17 11 12 6 7 11"></polyline>
     <polyline points="17 18 12 13 7 18"></polyline>
   </svg>
 );
 
 const IconTrash = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <polyline points="3 6 5 6 21 6"></polyline>
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
   </svg>
 );
 
 const IconMusic = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M9 18V5l12-2v13"></path>
     <circle cx="6" cy="18" r="3"></circle>
     <circle cx="18" cy="16" r="3"></circle>
@@ -114,7 +159,16 @@ const IconMusic = ({ size = 16 }: { size?: number }) => (
 );
 
 const IconMic = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
     <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
     <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -123,14 +177,32 @@ const IconMic = ({ size = 16 }: { size?: number }) => (
 );
 
 const IconX = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <line x1="18" y1="6" x2="6" y2="18"></line>
     <line x1="6" y1="6" x2="18" y2="18"></line>
   </svg>
 );
 
 const IconTrophy = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
     <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
     <path d="M4 22h16"></path>
@@ -141,7 +213,16 @@ const IconTrophy = ({ size = 16 }: { size?: number }) => (
 );
 
 const IconUsers = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
     <circle cx="9" cy="7" r="4"></circle>
     <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
@@ -150,41 +231,83 @@ const IconUsers = ({ size = 16 }: { size?: number }) => (
 );
 
 const IconUser = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
     <circle cx="12" cy="7" r="4"></circle>
   </svg>
 );
 
 const IconPlay = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="none"
+  >
     <polygon points="5 3 19 12 5 21 5 3"></polygon>
   </svg>
 );
 
 const IconSkipForward = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="none"
+  >
     <polygon points="5 4 15 12 5 20 5 4"></polygon>
-    <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2"></line>
+    <line
+      x1="19"
+      y1="5"
+      x2="19"
+      y2="19"
+      stroke="currentColor"
+      strokeWidth="2"
+    ></line>
   </svg>
 );
 
 export default function RoomTV() {
   const { code } = useParams<{ code: string }>();
+  const navigate = useNavigate();
   const [state, setState] = useState<RoomState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [finalized, setFinalized] = useState<FinalizedEvent | null>(null);
   const [rankingView, setRankingView] = useState<RankingView>("solo");
   const [autoRotate, setAutoRotate] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Check for tvToken on mount
+  useEffect(() => {
+    if (!code) return;
+    const tvToken = localStorage.getItem(`tvToken_${code}`);
+    if (!tvToken) {
+      // Redirect to TV login page
+      navigate(`/room/${code}/tv/login`);
+    } else {
+      setAuthChecked(true);
+    }
+  }, [code, navigate]);
 
   // Auto-rotate ranking view every 10 seconds
   useEffect(() => {
     if (!autoRotate) return;
     const interval = setInterval(() => {
-      setRankingView(prev => prev === "solo" ? "duet" : "solo");
+      setRankingView(prev => (prev === "solo" ? "duet" : "solo"));
     }, 10000);
     return () => clearInterval(interval);
   }, [autoRotate]);
@@ -215,25 +338,27 @@ export default function RoomTV() {
   const [ytReady, setYtReady] = useState(!!window.YT);
 
   // Truncated text with tooltip on hover
-  const TruncatedText = ({ 
-    text, 
-    maxLength, 
-    style 
-  }: { 
-    text: string; 
-    maxLength: number; 
+  const TruncatedText = ({
+    text,
+    maxLength,
+    style,
+  }: {
+    text: string;
+    maxLength: number;
     style?: React.CSSProperties;
   }) => {
     const [showTooltip, setShowTooltip] = useState(false);
     const needsTruncation = text.length > maxLength;
-    const displayText = needsTruncation ? text.slice(0, maxLength).trim() + "..." : text;
+    const displayText = needsTruncation
+      ? text.slice(0, maxLength).trim() + "..."
+      : text;
 
     if (!needsTruncation) {
       return <span style={style}>{text}</span>;
     }
 
     return (
-      <span 
+      <span
         style={{ position: "relative", cursor: "pointer", ...style }}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
@@ -303,10 +428,11 @@ export default function RoomTV() {
 
   // Connect to room via WS + HTTP fallback
   useEffect(() => {
-    if (!code) return;
+    if (!code || !authChecked) return;
 
+    const tvToken = localStorage.getItem(`tvToken_${code}`);
     const startTime = performance.now();
-    
+
     // Fallback: fetch state via HTTP in case WS is slow
     getState(code)
       .then(s => {
@@ -318,49 +444,55 @@ export default function RoomTV() {
           setState(s);
         }
       })
-      .catch((err) => {
+      .catch(err => {
         console.error("[TV] HTTP state error", err);
       });
 
-    const ws = connectWS(code, "tv", "TV", (msg: unknown) => {
-      const m = msg as {
-        type: string;
-        state?: RoomState;
-        singer?: string;
-        score?: number;
-        title?: string;
-        error?: string;
-        action?: string;
-      };
-      if (m.type === "STATE" && m.state) {
-        // Don't update state while showing score to avoid re-triggering
-        setFinalized(prev => {
-          if (!prev) {
-            setState(m.state!);
-          }
-          return prev;
-        });
-      } else if (m.type === "ERROR" && m.error === "room_not_found") {
-        setError("Sala não encontrada. Verifique o código.");
-      } else if (m.type === "FINALIZED") {
-        console.log("[TV] FINALIZED", m);
-        setFinalized({ singer: m.singer!, score: m.score!, title: m.title! });
-      } else if (m.type === "PLAYER_COMMAND") {
-        // Remote control from mobile
-        console.log("[TV] PLAYER_COMMAND", m.action);
-        if (playerRef.current) {
-          if (m.action === "play") {
-            playerRef.current.playVideo();
-          } else if (m.action === "pause") {
-            playerRef.current.pauseVideo();
+    const ws = connectWS(
+      code,
+      "tv",
+      "TV",
+      (msg: unknown) => {
+        const m = msg as {
+          type: string;
+          state?: RoomState;
+          singer?: string;
+          score?: number;
+          title?: string;
+          error?: string;
+          action?: string;
+        };
+        if (m.type === "STATE" && m.state) {
+          // Don't update state while showing score to avoid re-triggering
+          setFinalized(prev => {
+            if (!prev) {
+              setState(m.state!);
+            }
+            return prev;
+          });
+        } else if (m.type === "ERROR" && m.error === "room_not_found") {
+          setError("Sala não encontrada. Verifique o código.");
+        } else if (m.type === "FINALIZED") {
+          console.log("[TV] FINALIZED", m);
+          setFinalized({ singer: m.singer!, score: m.score!, title: m.title! });
+        } else if (m.type === "PLAYER_COMMAND") {
+          // Remote control from mobile
+          console.log("[TV] PLAYER_COMMAND", m.action);
+          if (playerRef.current) {
+            if (m.action === "play") {
+              playerRef.current.playVideo();
+            } else if (m.action === "pause") {
+              playerRef.current.pauseVideo();
+            }
           }
         }
-      }
-    });
+      },
+      tvToken
+    );
     wsRef.current = ws;
 
     return () => ws.close();
-  }, [code]);
+  }, [code, authChecked]);
 
   // Create / destroy YouTube player
   useEffect(() => {
@@ -444,13 +576,38 @@ export default function RoomTV() {
   // Render
   // ─────────────────────────────────────────────────────────────
 
+  // Wait for auth check
+  if (!authChecked) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#fff",
+        }}
+      >
+        <p>Verificando acesso...</p>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div
         className="container"
         style={{ paddingTop: 60, textAlign: "center" }}
       >
-        <h2 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <h2
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+          }}
+        >
           <IconX size={24} /> {error}
         </h2>
         <p style={{ color: "#888", marginTop: 16 }}>
@@ -479,11 +636,13 @@ export default function RoomTV() {
           color: "#fff",
         }}
       >
-        <div style={{ 
-          fontSize: 48, 
-          marginBottom: 24,
-          animation: "pulse 1.5s ease-in-out infinite",
-        }}>
+        <div
+          style={{
+            fontSize: 48,
+            marginBottom: 24,
+            animation: "pulse 1.5s ease-in-out infinite",
+          }}
+        >
           <IconMic size={64} />
         </div>
         <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 500 }}>
@@ -534,10 +693,19 @@ export default function RoomTV() {
               <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>
                 <TruncatedText text={state.nowPlaying.title} maxLength={60} />
               </div>
-              <div style={{ opacity: 0.7, fontSize: "0.9rem", display: "flex", alignItems: "center", gap: 6 }}>
+              <div
+                style={{
+                  opacity: 0.7,
+                  fontSize: "0.9rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
                 <IconMic size={14} />
-                {state.nowPlaying.singers?.map(s => typeof s === "string" ? s : s.name).join(" e ") ||
-                  state.nowPlaying.requestedBy}
+                {state.nowPlaying.singers
+                  ?.map(s => (typeof s === "string" ? s : s.name))
+                  .join(" e ") || state.nowPlaying.requestedBy}
               </div>
             </div>
             <div
@@ -547,8 +715,9 @@ export default function RoomTV() {
               {state.queue.length > 0 && (
                 <div>
                   Próxima:{" "}
-                  {state.queue[0].singers?.map(s => typeof s === "string" ? s : s.name).join(" e ") ||
-                    state.queue[0].requestedBy}
+                  {state.queue[0].singers
+                    ?.map(s => (typeof s === "string" ? s : s.name))
+                    .join(" e ") || state.queue[0].requestedBy}
                 </div>
               )}
             </div>
@@ -611,9 +780,48 @@ export default function RoomTV() {
               marginBottom: 40,
             }}
           >
-            <h1 style={{ margin: 0, fontSize: "2rem", display: "flex", alignItems: "center", gap: 12 }}>
-              <IconMic size={32} /> Karaokê - Sala {code}
-            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <button
+                onClick={() => navigate("/")}
+                style={{
+                  background: "rgba(255,255,255,0.1)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  borderRadius: 8,
+                  padding: "8px 16px",
+                  color: "#fff",
+                  fontSize: "0.9rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+                Sair
+              </button>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: "2rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <IconMic size={32} /> Karaokê - Sala {code}
+              </h1>
+            </div>
             <div
               style={{
                 background: "white",
@@ -628,7 +836,12 @@ export default function RoomTV() {
                 )}`}
                 alt="QR Code"
                 loading="lazy"
-                style={{ display: "block", marginBottom: 8, width: 120, height: 120 }}
+                style={{
+                  display: "block",
+                  marginBottom: 8,
+                  width: 120,
+                  height: 120,
+                }}
               />
               <div
                 style={{ color: "#000", fontSize: "0.8rem", fontWeight: 600 }}
@@ -669,7 +882,15 @@ export default function RoomTV() {
                         marginBottom: 8,
                       }}
                     >
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><IconMusic size={16} /> Próxima música</span>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <IconMusic size={16} /> Próxima música
+                      </span>
                     </div>
                     <div
                       style={{
@@ -692,10 +913,17 @@ export default function RoomTV() {
                       }}
                     >
                       <IconMic size={20} />
-                      {state.queue[0].singers?.map(s => typeof s === "string" ? s : s.name).join(" e ") ||
-                        state.queue[0].requestedBy}
+                      {state.queue[0].singers
+                        ?.map(s => (typeof s === "string" ? s : s.name))
+                        .join(" e ") || state.queue[0].requestedBy}
                     </div>
-                    <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        justifyContent: "center",
+                      }}
+                    >
                       <button
                         onClick={() => code && nextSong(code)}
                         style={{
@@ -750,33 +978,55 @@ export default function RoomTV() {
                             <TruncatedText text={item.title} maxLength={40} />
                           </span>
                           <span style={{ color: "#888", whiteSpace: "nowrap" }}>
-                            {item.singers?.map(s => typeof s === "string" ? s : s.name).join(" e ") || item.requestedBy}
+                            {item.singers
+                              ?.map(s => (typeof s === "string" ? s : s.name))
+                              .join(" e ") || item.requestedBy}
                           </span>
                           <div style={{ display: "flex", gap: 4 }}>
                             <button
                               onClick={() => handleQueueMove(item.id, "up")}
-                              style={{ padding: "6px 8px", background: "#333", display: "flex", alignItems: "center" }}
+                              style={{
+                                padding: "6px 8px",
+                                background: "#333",
+                                display: "flex",
+                                alignItems: "center",
+                              }}
                               title="Subir"
                             >
                               <IconChevronUp />
                             </button>
                             <button
                               onClick={() => handleQueueMove(item.id, "down")}
-                              style={{ padding: "6px 8px", background: "#333", display: "flex", alignItems: "center" }}
+                              style={{
+                                padding: "6px 8px",
+                                background: "#333",
+                                display: "flex",
+                                alignItems: "center",
+                              }}
                               title="Descer"
                             >
                               <IconChevronDown />
                             </button>
                             <button
                               onClick={() => handleQueueToTop(item.id)}
-                              style={{ padding: "6px 8px", background: "#333", display: "flex", alignItems: "center" }}
+                              style={{
+                                padding: "6px 8px",
+                                background: "#333",
+                                display: "flex",
+                                alignItems: "center",
+                              }}
                               title="Mover para o topo"
                             >
                               <IconChevronsUp />
                             </button>
                             <button
                               onClick={() => handleQueueRemove(item.id)}
-                              style={{ padding: "6px 8px", background: "rgba(180,60,60,0.9)", display: "flex", alignItems: "center" }}
+                              style={{
+                                padding: "6px 8px",
+                                background: "rgba(180,60,60,0.9)",
+                                display: "flex",
+                                alignItems: "center",
+                              }}
                               title="Remover"
                             >
                               <IconTrash />
@@ -801,7 +1051,14 @@ export default function RoomTV() {
                     background: "rgba(255,255,255,0.05)",
                   }}
                 >
-                  <div style={{ fontSize: "4rem", marginBottom: 16, display: "flex", justifyContent: "center" }}>
+                  <div
+                    style={{
+                      fontSize: "4rem",
+                      marginBottom: 16,
+                      display: "flex",
+                      justifyContent: "center",
+                    }}
+                  >
                     <IconMusic size={64} />
                   </div>
                   <h2 style={{ margin: "0 0 12px" }}>Fila vazia</h2>
@@ -814,23 +1071,44 @@ export default function RoomTV() {
 
             {/* Ranking */}
             <div className="card" style={{ padding: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                <h2 style={{ margin: 0, fontSize: "1.5rem", display: "flex", alignItems: "center", gap: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 20,
+                }}
+              >
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: "1.5rem",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
                   <IconTrophy size={28} /> Ranking
                 </h2>
                 {/* Toggle Solo/Duplas */}
-                <div style={{ 
-                  display: "flex", 
-                  gap: 4, 
-                  background: "#222",
-                  borderRadius: 8,
-                  padding: 4,
-                }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 4,
+                    background: "#222",
+                    borderRadius: 8,
+                    padding: 4,
+                  }}
+                >
                   <button
-                    onClick={() => { setRankingView("solo"); setAutoRotate(false); }}
+                    onClick={() => {
+                      setRankingView("solo");
+                      setAutoRotate(false);
+                    }}
                     style={{
                       padding: "6px 12px",
-                      background: rankingView === "solo" ? "#ff4081" : "transparent",
+                      background:
+                        rankingView === "solo" ? "#ff4081" : "transparent",
                       border: "none",
                       borderRadius: 6,
                       color: "#fff",
@@ -845,10 +1123,14 @@ export default function RoomTV() {
                     <IconUser size={14} /> Solo
                   </button>
                   <button
-                    onClick={() => { setRankingView("duet"); setAutoRotate(false); }}
+                    onClick={() => {
+                      setRankingView("duet");
+                      setAutoRotate(false);
+                    }}
                     style={{
                       padding: "6px 12px",
-                      background: rankingView === "duet" ? "#ff4081" : "transparent",
+                      background:
+                        rankingView === "duet" ? "#ff4081" : "transparent",
                       border: "none",
                       borderRadius: 6,
                       color: "#fff",
@@ -889,13 +1171,26 @@ export default function RoomTV() {
                             fontSize: i < 3 ? "1.2rem" : "1rem",
                           }}
                         >
-                          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                            }}
+                          >
                             <span
                               style={{
                                 width: 28,
                                 height: 28,
                                 borderRadius: "50%",
-                                background: i === 0 ? "#f1c40f" : i === 1 ? "#bdc3c7" : i === 2 ? "#cd6133" : "#555",
+                                background:
+                                  i === 0
+                                    ? "#f1c40f"
+                                    : i === 1
+                                    ? "#bdc3c7"
+                                    : i === 2
+                                    ? "#cd6133"
+                                    : "#555",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -919,65 +1214,82 @@ export default function RoomTV() {
                       ))}
                   </div>
                 )
+              ) : // Duet ranking
+              !state.duetRanking || state.duetRanking.length === 0 ? (
+                <p style={{ color: "#888", fontSize: "1.1rem" }}>
+                  Nenhuma dupla pontuou ainda.
+                  <br />
+                  Cante em dupla para aparecer aqui!
+                </p>
               ) : (
-                // Duet ranking
-                !state.duetRanking || state.duetRanking.length === 0 ? (
-                  <p style={{ color: "#888", fontSize: "1.1rem" }}>
-                    Nenhuma dupla pontuou ainda.
-                    <br />
-                    Cante em dupla para aparecer aqui!
-                  </p>
-                ) : (
-                  <div>
-                    {[...state.duetRanking]
-                      .sort((a, b) => b.score - a.score)
-                      .map((duet, i) => (
-                        <div
-                          key={duet.names.join("-")}
+                <div>
+                  {[...state.duetRanking]
+                    .sort((a, b) => b.score - a.score)
+                    .map((duet, i) => (
+                      <div
+                        key={duet.names.join("-")}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "12px 0",
+                          borderBottom: "1px solid #333",
+                          fontSize: i < 3 ? "1.2rem" : "1rem",
+                        }}
+                      >
+                        <span
                           style={{
                             display: "flex",
-                            justifyContent: "space-between",
                             alignItems: "center",
-                            padding: "12px 0",
-                            borderBottom: "1px solid #333",
-                            fontSize: i < 3 ? "1.2rem" : "1rem",
+                            gap: 10,
                           }}
                         >
-                          <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span
-                              style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: "50%",
-                                background: i === 0 ? "#f1c40f" : i === 1 ? "#bdc3c7" : i === 2 ? "#cd6133" : "#555",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontSize: "0.85rem",
-                                fontWeight: 700,
-                              }}
-                            >
-                              {i + 1}
-                            </span>
-                            {duet.names[0]} & {duet.names[1]}
+                          <span
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: "50%",
+                              background:
+                                i === 0
+                                  ? "#f1c40f"
+                                  : i === 1
+                                  ? "#bdc3c7"
+                                  : i === 2
+                                  ? "#cd6133"
+                                  : "#555",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "0.85rem",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {i + 1}
                           </span>
-                          <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-                            <span
-                              style={{
-                                fontWeight: 700,
-                                color: i === 0 ? "#ffd700" : "inherit",
-                              }}
-                            >
-                              {duet.score} pts
-                            </span>
-                            <span style={{ fontSize: "0.8rem", color: "#888" }}>
-                              {duet.count} música{duet.count > 1 ? "s" : ""}
-                            </span>
+                          {duet.names[0]} & {duet.names[1]}
+                        </span>
+                        <span
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color: i === 0 ? "#ffd700" : "inherit",
+                            }}
+                          >
+                            {duet.score} pts
                           </span>
-                        </div>
-                      ))}
-                  </div>
-                )
+                          <span style={{ fontSize: "0.8rem", color: "#888" }}>
+                            {duet.count} música{duet.count > 1 ? "s" : ""}
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                </div>
               )}
             </div>
           </div>

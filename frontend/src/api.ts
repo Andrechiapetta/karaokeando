@@ -1,27 +1,6 @@
 const API_BASE = "";
 
 // ─────────────────────────────────────────────────────────────
-// User ID Management (persistent across sessions)
-// ─────────────────────────────────────────────────────────────
-
-const USER_ID_KEY = "karaokeando_user_id";
-
-function generateUserId(): string {
-  return (
-    "pk_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
-  );
-}
-
-export function getUserId(): string {
-  let id = localStorage.getItem(USER_ID_KEY);
-  if (!id) {
-    id = generateUserId();
-    localStorage.setItem(USER_ID_KEY, id);
-  }
-  return id;
-}
-
-// ─────────────────────────────────────────────────────────────
 // YouTube Search
 // ─────────────────────────────────────────────────────────────
 
@@ -231,7 +210,7 @@ export function connectWS(
   role: "tv" | "mobile",
   name: string,
   onMessage: (msg: unknown) => void,
-  userId?: string
+  token?: string | null
 ): WebSocket {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const url = `${protocol}//${window.location.host}/ws/${roomCode}`;
@@ -240,7 +219,7 @@ export function connectWS(
 
   ws.onopen = () => {
     console.log("[WS] Connected, sending HELLO");
-    ws.send(JSON.stringify({ type: "HELLO", role, name, userId }));
+    ws.send(JSON.stringify({ type: "HELLO", role, name, token }));
   };
 
   ws.onmessage = event => {

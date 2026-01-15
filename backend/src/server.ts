@@ -1,3 +1,4 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
@@ -8,6 +9,13 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { trackEvent, analytics } from "./analytics.js";
+import authRoutes from "./routes/auth.js";
+import roomRoutes, {
+  setRoomCallbacks,
+  recordRoomVisit,
+} from "./routes/rooms.js";
+import { verifyToken, UserTokenPayload, TvTokenPayload } from "./lib/auth.js";
+import prisma from "./lib/prisma.js";
 
 const execAsync = promisify(exec);
 
@@ -250,6 +258,81 @@ function getParticipantsNamesList(roomCode: string): string[] {
   return getParticipantsList(roomCode).map(p => p.name);
 }
 
+// Generate unique nickname for a user in a room
+// If "André" exists, returns "André2", "André3", etc.
+function getUniqueNickname(
+  roomCode: string,
+  desiredName: string,
+  odUserId: string
+): string {
+  const participants = getParticipantsList(roomCode);
+  const trimmedName = desiredName.trim();
+
+  // Check if this exact name is already used by someone else
+  const nameExists = participants.some(
+    p => p.name.toLowerCase() === trimmedName.toLowerCase() && p.id !== odUserId
+  );
+
+  if (!nameExists) {
+    return trimmedName;
+  }
+
+  // Find unique suffix
+  let suffix = 2;
+  while (suffix < 100) {
+    const candidateName = `${trimmedName}${suffix}`;
+    const candidateExists = participants.some(
+      p =>
+        p.name.toLowerCase() === candidateName.toLowerCase() &&
+        p.id !== odUserId
+    );
+    if (!candidateExists) {
+      return candidateName;
+    }
+    suffix++;
+  }
+
+  // Fallback (very unlikely)
+  return `${trimmedName}_${randomId().slice(0, 4)}`;
+}
+
+// Helper: Get or restore room from DB
+async function getOrRestoreRoom(roomCode: string): Promise<RoomState | null> {
+  const code = roomCode.toUpperCase();
+  let room = rooms.get(code);
+
+  if (!room) {
+    // Check database
+    const dbRoom = await prisma.room.findUnique({
+      where: { code },
+    });
+
+    if (!dbRoom) return null;
+
+    // Restore room in memory
+    room = {
+      code: dbRoom.code,
+      createdAt: dbRoom.createdAt.getTime(),
+      nowPlaying: null,
+      queue: [],
+      ranking: {},
+      duetRanking: {},
+      lastFinalizeMs: 0,
+      showingScore: false,
+    };
+    rooms.set(code, room);
+    connections.set(code, {
+      tv: new Set(),
+      mobile: new Set(),
+      participants: new Map(),
+      recentParticipants: new Map(),
+    });
+    console.log(`🔄 Restored room ${code} from database`);
+  }
+
+  return room;
+}
+
 function broadcastParticipants(roomCode: string) {
   const participants = getParticipantsList(roomCode);
   console.log(
@@ -271,41 +354,46 @@ const app = Fastify({ logger: { level: "warn" } });
 await app.register(cors, { origin: true });
 await app.register(websocket);
 
+// Register auth routes
+await app.register(authRoutes);
+
+// Register room routes (new DB-backed routes)
+await app.register(roomRoutes);
+
+// Setup callback for when room is created via DB
+setRoomCallbacks({
+  onRoomCreated: (roomCode: string, ownerId: string) => {
+    // Create in-memory state for the room
+    if (!rooms.has(roomCode)) {
+      rooms.set(roomCode, {
+        code: roomCode,
+        createdAt: Date.now(),
+        nowPlaying: null,
+        queue: [],
+        ranking: {},
+        duetRanking: {},
+        lastFinalizeMs: 0,
+        showingScore: false,
+      });
+      connections.set(roomCode, {
+        tv: new Set(),
+        mobile: new Set(),
+        participants: new Map(),
+        recentParticipants: new Map(),
+      });
+      trackEvent("room_created", roomCode);
+    }
+  },
+});
+
 // Health
 app.get("/health", async () => ({ status: "ok" }));
 
-// Create room
-app.post("/api/rooms", async () => {
-  let code = makeRoomCode();
-  while (rooms.has(code)) code = makeRoomCode();
-  rooms.set(code, {
-    code,
-    createdAt: Date.now(),
-    nowPlaying: null,
-    queue: [],
-    ranking: {},
-    duetRanking: {},
-    lastFinalizeMs: 0,
-    showingScore: false,
-  });
-  connections.set(code, {
-    tv: new Set(),
-    mobile: new Set(),
-    participants: new Map(),
-    recentParticipants: new Map(),
-  });
-
-  // Track analytics
-  trackEvent("room_created", code);
-
-  return { roomCode: code };
-});
-
-// Get state
+// Get state (with auto-restore from DB if room exists in DB but not in memory)
 app.get<{ Params: { roomCode: string } }>(
   "/api/rooms/:roomCode/state",
   async (req, reply) => {
-    const room = rooms.get(req.params.roomCode);
+    const room = await getOrRestoreRoom(req.params.roomCode);
     if (!room) return reply.code(404).send({ error: "room_not_found" });
     return getRoomState(room);
   }
@@ -316,7 +404,9 @@ app.get<{ Params: { roomCode: string } }>(
 app.get<{ Params: { roomCode: string } }>(
   "/api/rooms/:roomCode/participants",
   async (req, reply) => {
-    const conns = connections.get(req.params.roomCode);
+    const room = await getOrRestoreRoom(req.params.roomCode);
+    if (!room) return reply.code(404).send({ error: "room_not_found" });
+    const conns = connections.get(room.code);
     if (!conns) return reply.code(404).send({ error: "room_not_found" });
 
     const participants = getParticipantsList(req.params.roomCode);
@@ -336,7 +426,7 @@ app.post<{
     partnerId?: string;
   };
 }>("/api/rooms/:roomCode/enqueue", async (req, reply) => {
-  const room = rooms.get(req.params.roomCode);
+  const room = await getOrRestoreRoom(req.params.roomCode);
   if (!room) return reply.code(404).send({ error: "room_not_found" });
 
   const videoId = (req.body.videoId || "").trim();
@@ -392,7 +482,7 @@ app.post<{
 app.post<{ Params: { roomCode: string } }>(
   "/api/rooms/:roomCode/next",
   async (req, reply) => {
-    const room = rooms.get(req.params.roomCode);
+    const room = await getOrRestoreRoom(req.params.roomCode);
     if (!room) return reply.code(404).send({ error: "room_not_found" });
 
     room.nowPlaying = room.queue.shift() || null;
@@ -437,7 +527,7 @@ app.post<{
   Params: { roomCode: string };
   Body: { itemId: string };
 }>("/api/rooms/:roomCode/queue/remove", async (req, reply) => {
-  const room = rooms.get(req.params.roomCode);
+  const room = await getOrRestoreRoom(req.params.roomCode);
   if (!room) return reply.code(404).send({ error: "room_not_found" });
 
   const itemId = (req.body.itemId || "").trim();
@@ -457,7 +547,7 @@ app.post<{
   Params: { roomCode: string };
   Body: { itemId: string; direction: "up" | "down" };
 }>("/api/rooms/:roomCode/queue/move", async (req, reply) => {
-  const room = rooms.get(req.params.roomCode);
+  const room = await getOrRestoreRoom(req.params.roomCode);
   if (!room) return reply.code(404).send({ error: "room_not_found" });
 
   const itemId = (req.body.itemId || "").trim();
@@ -485,7 +575,7 @@ app.post<{
   Params: { roomCode: string };
   Body: { itemId: string };
 }>("/api/rooms/:roomCode/queue/to-top", async (req, reply) => {
-  const room = rooms.get(req.params.roomCode);
+  const room = await getOrRestoreRoom(req.params.roomCode);
   if (!room) return reply.code(404).send({ error: "room_not_found" });
 
   const itemId = (req.body.itemId || "").trim();
@@ -506,7 +596,7 @@ app.post<{
 app.post<{ Params: { roomCode: string }; Body: { requester?: string } }>(
   "/api/rooms/:roomCode/finalize",
   async (req, reply) => {
-    const room = rooms.get(req.params.roomCode);
+    const room = await getOrRestoreRoom(req.params.roomCode);
     if (!room) return reply.code(404).send({ error: "room_not_found" });
 
     const requester = (req.body.requester || "").trim() || "Convidado";
@@ -547,30 +637,34 @@ app.post<{ Params: { roomCode: string }; Body: { requester?: string } }>(
       }
       const duetKey = makeDuetKey(singers[0].id, singers[1].id);
       if (!room.duetRanking[duetKey]) {
-        // Sort names alphabetically for consistent display
-        const sortedNames = [singers[0].name, singers[1].name].sort() as [
-          string,
-          string
-        ];
-        const sortedIds = [singers[0].id, singers[1].id].sort() as [
-          string,
-          string
-        ];
+        // Sort singers by ID to keep ID-name correspondence consistent
+        const sortedSingers = [...singers].sort((a, b) =>
+          a.id.localeCompare(b.id)
+        );
         room.duetRanking[duetKey] = {
-          singerIds: sortedIds,
-          names: sortedNames,
+          singerIds: [sortedSingers[0].id, sortedSingers[1].id] as [
+            string,
+            string
+          ],
+          names: [sortedSingers[0].name, sortedSingers[1].name] as [
+            string,
+            string
+          ],
           score: 0,
           count: 0,
         };
+      } else {
+        // Update names based on singerIds order (preserves ID-name correspondence)
+        const entry = room.duetRanking[duetKey];
+        for (let i = 0; i < entry.singerIds.length; i++) {
+          const singer = singers.find(s => s.id === entry.singerIds[i]);
+          if (singer) {
+            entry.names[i] = singer.name;
+          }
+        }
       }
       room.duetRanking[duetKey].score += score;
       room.duetRanking[duetKey].count += 1;
-      // Update names in case they changed
-      const sortedNames = [singers[0].name, singers[1].name].sort() as [
-        string,
-        string
-      ];
-      room.duetRanking[duetKey].names = sortedNames;
     }
 
     // Format singer names for display (e.g., "Dede e Ana")
@@ -620,7 +714,7 @@ app.post<{
   Params: { roomCode: string };
   Body: { userId: string; newName: string };
 }>("/api/rooms/:roomCode/update-name", async (req, reply) => {
-  const room = rooms.get(req.params.roomCode);
+  const room = await getOrRestoreRoom(req.params.roomCode);
   if (!room) return reply.code(404).send({ error: "room_not_found" });
 
   const { userId, newName } = req.body;
@@ -714,7 +808,7 @@ app.post<{
 app.post<{ Params: { roomCode: string } }>(
   "/api/rooms/:roomCode/score-done",
   async (req, reply) => {
-    const room = rooms.get(req.params.roomCode);
+    const room = await getOrRestoreRoom(req.params.roomCode);
     if (!room) return reply.code(404).send({ error: "room_not_found" });
 
     room.showingScore = false;
@@ -728,7 +822,7 @@ app.post<{ Params: { roomCode: string } }>(
 app.post<{ Params: { roomCode: string }; Body: { action: string } }>(
   "/api/rooms/:roomCode/player",
   async (req, reply) => {
-    const room = rooms.get(req.params.roomCode);
+    const room = await getOrRestoreRoom(req.params.roomCode);
     if (!room) return reply.code(404).send({ error: "room_not_found" });
 
     const action = req.body.action; // 'play' | 'pause'
@@ -1012,61 +1106,129 @@ app.get<{ Params: { roomCode: string } }>(
       return;
     }
 
-    socket.on("message", raw => {
+    socket.on("message", (raw: Buffer | string) => {
       try {
         const msg = JSON.parse(raw.toString());
         if (msg.type === "HELLO") {
-          role = msg.role === "tv" ? "tv" : "mobile";
-          name = msg.name || "";
-          odUserId = msg.userId || `anon_${randomId()}`;
           const conns = connections.get(roomCode)!;
 
-          // Check for duplicate name in room (only for mobile, not TV)
-          if (role === "mobile" && name) {
-            const existingParticipants = getParticipantsList(roomCode);
-            const duplicateName = existingParticipants.find(
-              p =>
-                p.name.toLowerCase() === name.toLowerCase() && p.id !== odUserId
-            );
-            if (duplicateName) {
+          // New auth flow: token-based
+          if (msg.token) {
+            const payload = verifyToken(msg.token);
+
+            if (!payload) {
               socket.send(
                 JSON.stringify({
                   type: "ERROR",
-                  error: "duplicate_name",
-                  message: `O nome "${name}" já está sendo usado nesta sala. Por favor, escolha outro nome.`,
+                  error: "invalid_token",
+                  message: "Token inválido ou expirado",
                 })
               );
               socket.close();
               return;
             }
-          }
 
-          if (role === "tv") {
-            conns.tv.add(socket);
-          } else {
-            conns.mobile.add(socket);
-            // Track participant with ID for duet selection
-            if (name && odUserId) {
+            if (payload.type === "tv") {
+              // TV token
+              if (payload.roomCode !== roomCode) {
+                socket.send(
+                  JSON.stringify({
+                    type: "ERROR",
+                    error: "wrong_room",
+                    message: "Token não é válido para esta sala",
+                  })
+                );
+                socket.close();
+                return;
+              }
+              role = "tv";
+              name = "TV";
+              odUserId = `tv_${roomCode}`;
+              conns.tv.add(socket);
+            } else if (payload.type === "user") {
+              // User token (mobile)
+              role = "mobile";
+              odUserId = payload.userId;
+
+              // Use the name from HELLO message (current nickname) if provided,
+              // otherwise fall back to name from token (original registered name)
+              const requestedName = msg.name || payload.name;
+
+              // Get unique nickname (auto-number if duplicate)
+              name = getUniqueNickname(roomCode, requestedName, odUserId);
+
+              conns.mobile.add(socket);
               conns.participants.set(socket, { id: odUserId, name });
-              // Remove from recentParticipants since they're online now
               conns.recentParticipants.delete(odUserId);
-              // Broadcast updated participants list to all clients
+
+              // Send the assigned nickname back to the user
+              // wasModified is true only if server changed the requested name
+              socket.send(
+                JSON.stringify({
+                  type: "NICKNAME_ASSIGNED",
+                  nickname: name,
+                  originalName: requestedName,
+                  wasModified: name !== requestedName,
+                })
+              );
+
               broadcastParticipants(roomCode);
-              // Track analytics
+
+              // Record room visit (async, don't wait)
+              recordRoomVisit(roomCode, odUserId).catch(() => {});
+
               trackEvent("user_joined", roomCode, {
                 userName: name,
                 odUserId,
                 role,
               });
             }
+          } else {
+            // Legacy flow: no token (for users without accounts yet)
+            role = msg.role === "tv" ? "tv" : "mobile";
+            name = msg.name || "";
+            odUserId = msg.userId || `anon_${randomId()}`;
+
+            if (role === "mobile" && name) {
+              // Get unique nickname (auto-number if duplicate)
+              const originalName = name;
+              name = getUniqueNickname(roomCode, name, odUserId);
+
+              if (name !== originalName) {
+                socket.send(
+                  JSON.stringify({
+                    type: "NICKNAME_ASSIGNED",
+                    nickname: name,
+                    originalName,
+                    wasModified: true,
+                  })
+                );
+              }
+            }
+
+            if (role === "tv") {
+              conns.tv.add(socket);
+            } else {
+              conns.mobile.add(socket);
+              if (name && odUserId) {
+                conns.participants.set(socket, { id: odUserId, name });
+                conns.recentParticipants.delete(odUserId);
+                broadcastParticipants(roomCode);
+                trackEvent("user_joined", roomCode, {
+                  userName: name,
+                  odUserId,
+                  role,
+                });
+              }
+            }
           }
+
           socket.send(
             JSON.stringify({ type: "HELLO", roomCode, role, name, odUserId })
           );
           socket.send(
             JSON.stringify({ type: "STATE", state: getRoomState(room) })
           );
-          // Send current participants list to this new client
           socket.send(
             JSON.stringify({
               type: "PARTICIPANTS",

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
+import { useAuth, getToken } from "../context/AuthContext";
 import {
   connectWS,
   enqueue,
@@ -13,7 +14,6 @@ import {
   finalizeSong,
   searchYouTube,
   getVideoInfo,
-  getUserId,
   updateUserName,
   type SavedSong,
   type TopSong,
@@ -371,6 +371,8 @@ const TruncatedText = ({
 
 export default function RoomMobile() {
   const { code } = useParams<{ code: string }>();
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [state, setState] = useState<RoomState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("queue");
@@ -393,6 +395,8 @@ export default function RoomMobile() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+  const [nickname, setNickname] = useState<string>(""); // Apelido na sala (pode ser diferente do nome cadastrado)
+  const [toast, setToast] = useState<string | null>(null); // Temporary notification
   // Modal para adicionar música (escolher solo/dueto)
   const [addSongModal, setAddSongModal] = useState<{
     videoId: string;
@@ -400,39 +404,45 @@ export default function RoomMobile() {
     source: "search" | "library" | "top";
   } | null>(null);
   const [modalPartner, setModalPartner] = useState<string>(""); // Partner ID selected in modal
-  const [myName, setMyName] = useState(() => {
-    return localStorage.getItem("karaokeando_name") || "";
-  });
   const wsRef = useRef<WebSocket | null>(null);
 
-  const myUserId = getUserId();
+  // Check auth on mount
+  useEffect(() => {
+    if (!authLoading && !user && code) {
+      // Redirect to guest register with this room code
+      navigate(`/guest-register?redirect=${code}`);
+    }
+  }, [authLoading, user, code, navigate]);
+
+  // Initialize nickname from user name (will be updated by server if duplicate)
+  useEffect(() => {
+    if (user?.name && !nickname) {
+      setNickname(user.name);
+    }
+  }, [user?.name, nickname]);
+
+  const myUserId = user?.id || "";
 
   const handleSaveName = async () => {
     const trimmed = nameInput.trim();
-    if (trimmed) {
-      const oldName = myName;
-
-      // If changing name (not first time), validate on server first
-      if (oldName && oldName !== trimmed && code) {
-        try {
-          const result = await updateUserName(code, myUserId, trimmed);
-          if (result.error === "duplicate_name") {
-            setNameError(result.message || "Este nome já está sendo usado.");
-            return;
-          }
-        } catch (e) {
-          console.error("Failed to update name on server", e);
+    if (trimmed && code) {
+      try {
+        const result = await updateUserName(code, myUserId, trimmed);
+        if (result.error === "duplicate_name") {
+          setNameError(result.message || "Este nome já está sendo usado.");
+          return;
         }
-      }
+        // Update local nickname
+        setNickname(trimmed);
+        setShowNameModal(false);
+        setNameError(null);
 
-      localStorage.setItem("karaokeando_name", trimmed);
-      setMyName(trimmed);
-      setShowNameModal(false);
-      setNameError(null);
-
-      // Reconnect WebSocket with new name
-      if (wsRef.current) {
-        wsRef.current.close();
+        // Reconnect WebSocket with new name
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+      } catch (e) {
+        console.error("Failed to update name on server", e);
       }
     }
   };
@@ -448,7 +458,9 @@ export default function RoomMobile() {
   }, []);
 
   useEffect(() => {
-    if (!code || !myName) return;
+    if (!code || !user) return;
+
+    const token = getToken();
 
     // Fallback: fetch state via HTTP in case WS is slow
     getState(code)
@@ -465,7 +477,7 @@ export default function RoomMobile() {
     const ws = connectWS(
       code,
       "mobile",
-      myName,
+      nickname || user?.name || "",
       (msg: unknown) => {
         const m = msg as {
           type: string;
@@ -473,6 +485,9 @@ export default function RoomMobile() {
           error?: string;
           message?: string;
           participants?: ParticipantInfo[];
+          nickname?: string;
+          originalName?: string;
+          wasModified?: boolean;
         };
         if (m.type === "STATE" && m.state) {
           setState(prev => {
@@ -485,25 +500,38 @@ export default function RoomMobile() {
         } else if (m.type === "PARTICIPANTS" && m.participants) {
           console.log("[Mobile] PARTICIPANTS received", m.participants);
           setParticipants(m.participants);
+        } else if (m.type === "NICKNAME_ASSIGNED" && m.nickname) {
+          // Server assigned a (possibly modified) nickname
+          console.log(
+            "[Mobile] Nickname assigned:",
+            m.nickname,
+            "was modified:",
+            m.wasModified
+          );
+          setNickname(m.nickname);
+          if (m.wasModified) {
+            // Show a brief toast notification that name was changed
+            setToast(
+              `Seu apelido é "${m.nickname}" (já havia alguém com seu nome)`
+            );
+            // Clear the toast after 5 seconds
+            setTimeout(() => setToast(null), 5000);
+          }
         } else if (m.type === "ERROR" && m.error === "room_not_found") {
           setError("Sala não encontrada. Verifique o código.");
         } else if (m.type === "ERROR" && m.error === "duplicate_name") {
-          // Name is already taken, clear it and show modal again
-          localStorage.removeItem("karaokeando_name");
-          setMyName("");
-          setNameInput("");
           setError(
             m.message || "Este nome já está sendo usado. Escolha outro."
           );
         }
         // FINALIZED is now only handled by TV - mobile ignores it
       },
-      myUserId
+      token
     );
     wsRef.current = ws;
 
     return () => ws.close();
-  }, [code, myUserId, myName]);
+  }, [code, user, nickname]);
 
   // Fetch participants once on mount (WebSocket will keep it updated)
   useEffect(() => {
@@ -665,13 +693,14 @@ export default function RoomMobile() {
     if (!code || !addSongModal) return;
 
     const partner = participants.find(p => p.id === modalPartner);
+    const wasFromSearch = addSongModal.source === "search";
 
     setAdding(addSongModal.videoId);
     await enqueue(
       code,
       addSongModal.videoId,
       addSongModal.title,
-      myName,
+      nickname,
       partner?.name || undefined,
       myUserId,
       partner?.id || undefined
@@ -680,13 +709,12 @@ export default function RoomMobile() {
     setAddSongModal(null);
     setModalPartner("");
 
-    // Clear search if from search
-    if (addSongModal.source === "search") {
-      setSearchResults([]);
-      setSearchQuery("");
-      setCustomTitle("");
-      setSearchError(null);
-    }
+    // Clear search field and results after adding any song
+    setSearchResults([]);
+    setSearchQuery("");
+    setCustomTitle("");
+    setSearchError(null);
+    setSavedFilter(""); // Also clear library filter
 
     // Refresh library
     getSongLibrary()
@@ -700,8 +728,8 @@ export default function RoomMobile() {
   };
 
   // Show name modal if no name (before other screens)
-  // This also shows when there's a duplicate_name error
-  if (!myName) {
+  // This can happen if we want to let user change their name
+  if (showNameModal) {
     return (
       <div
         className="container"
@@ -732,7 +760,7 @@ export default function RoomMobile() {
                 gap: 8,
               }}
             >
-              <IconMic size={24} /> Sala {code}
+              <IconMic size={24} /> Alterar Nome
             </span>
           </h3>
           <p
@@ -743,9 +771,9 @@ export default function RoomMobile() {
               fontSize: 14,
             }}
           >
-            Digite seu nome para entrar
+            Digite seu novo nome
           </p>
-          {error && (
+          {nameError && (
             <div
               style={{
                 background: "#ff4444",
@@ -757,7 +785,7 @@ export default function RoomMobile() {
                 textAlign: "center",
               }}
             >
-              {error}
+              {nameError}
             </div>
           )}
           <input
@@ -765,7 +793,7 @@ export default function RoomMobile() {
             value={nameInput}
             onChange={e => {
               setNameInput(e.target.value);
-              if (error) setError(null); // Clear error when typing
+              if (nameError) setNameError(null);
             }}
             onKeyDown={e => e.key === "Enter" && handleSaveName()}
             placeholder="Seu nome"
@@ -775,7 +803,7 @@ export default function RoomMobile() {
               padding: 12,
               fontSize: 16,
               background: "#2a2a2a",
-              border: error ? "1px solid #ff4444" : "1px solid #444",
+              border: nameError ? "1px solid #ff4444" : "1px solid #444",
               borderRadius: 8,
               color: "#fff",
               marginBottom: 16,
@@ -797,15 +825,27 @@ export default function RoomMobile() {
               cursor: nameInput.trim() ? "pointer" : "not-allowed",
             }}
           >
-            Entrar
+            Atualizar Nome
           </button>
         </div>
       </div>
     );
   }
 
-  // Show error screen for room_not_found (but not for duplicate_name since that's handled above)
-  if (error && !error.includes("nome")) {
+  // Loading state while checking auth
+  if (authLoading || !user) {
+    return (
+      <div
+        className="container"
+        style={{ paddingTop: 60, textAlign: "center" }}
+      >
+        <h2>Carregando...</h2>
+      </div>
+    );
+  }
+
+  // Show error screen for room_not_found
+  if (error) {
     return (
       <div
         className="container"
@@ -847,22 +887,80 @@ export default function RoomMobile() {
 
   return (
     <div className="container">
+      {/* Toast notification */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 20,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#4CAF50",
+            color: "#fff",
+            padding: "12px 20px",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            zIndex: 2000,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            animation: "fadeIn 0.3s ease",
+          }}
+        >
+          {toast}
+        </div>
+      )}
+
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: 8,
+          marginBottom: 12,
         }}
       >
-        <h2
-          style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}
+        <button
+          onClick={() => navigate("/")}
+          style={{
+            background: "transparent",
+            border: "1px solid #666",
+            borderRadius: 8,
+            padding: "6px 12px",
+            color: "#fff",
+            fontSize: 14,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+          }}
         >
-          <IconMic size={20} /> Sala {code}
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          Sair da sala
+        </button>
+        <h2
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            margin: 0,
+            fontSize: "1.2rem",
+          }}
+        >
+          <IconMic size={20} /> {code}
         </h2>
         <button
           onClick={() => {
-            setNameInput(myName);
+            setNameInput(nickname);
             setShowNameModal(true);
           }}
           style={{
@@ -878,7 +976,7 @@ export default function RoomMobile() {
             cursor: "pointer",
           }}
         >
-          {myName || "Convidado"} <IconEdit size={14} />
+          {nickname || "Convidado"} <IconEdit size={14} />
         </button>
       </div>
 
@@ -906,7 +1004,7 @@ export default function RoomMobile() {
             }}
           >
             <h3 style={{ margin: "0 0 16px", textAlign: "center" }}>
-              Mudar nome
+              Mudar apelido
             </h3>
             {nameError && (
               <div
@@ -931,7 +1029,7 @@ export default function RoomMobile() {
                 if (nameError) setNameError(null);
               }}
               onKeyDown={e => e.key === "Enter" && handleSaveName()}
-              placeholder="Digite seu nome"
+              placeholder="Digite seu apelido"
               autoFocus
               style={{
                 width: "100%",
@@ -1082,7 +1180,7 @@ export default function RoomMobile() {
                   )}
                 </button>
                 <button
-                  onClick={() => code && finalizeSong(code, myName)}
+                  onClick={() => code && finalizeSong(code, nickname)}
                   style={{
                     flex: 1,
                     background: "#e74c3c",
