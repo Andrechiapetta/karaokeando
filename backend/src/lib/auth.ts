@@ -1,7 +1,13 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
+// Validate JWT_SECRET in production
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("JWT_SECRET must be set in production!");
+}
+const SECRET = JWT_SECRET || "dev-secret-change-in-production";
+
 const SALT_ROUNDS = 10;
 
 // Token payload types
@@ -37,7 +43,7 @@ export async function verifyPassword(
 export function generateUserToken(
   payload: Omit<UserTokenPayload, "type">
 ): string {
-  return jwt.sign({ ...payload, type: "user" }, JWT_SECRET, {
+  return jwt.sign({ ...payload, type: "user" }, SECRET, {
     expiresIn: "24h",
   });
 }
@@ -45,13 +51,13 @@ export function generateUserToken(
 // Generate TV token (12h expiry)
 export function generateTvToken(roomCode: string): string {
   const payload: TvTokenPayload = { roomCode, type: "tv" };
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "12h" });
+  return jwt.sign(payload, SECRET, { expiresIn: "12h" });
 }
 
 // Verify and decode token
 export function verifyToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as TokenPayload;
+    return jwt.verify(token, SECRET) as TokenPayload;
   } catch {
     return null;
   }

@@ -18,11 +18,14 @@ Servidor disponível em `http://localhost:8787`
 backend/
 ├── src/
 │   ├── server.ts      # Servidor Fastify + WebSocket + Rotas
-│   └── analytics.ts   # Sistema de tracking de eventos
+│   └── lib/
+│       ├── auth.ts    # Autenticação JWT
+│       ├── prisma.ts  # Cliente Prisma
+│       └── songs.ts   # Operações de músicas no banco
 │
-├── data/              # Dados persistidos (JSON)
-│   ├── song-library.json   # Biblioteca de músicas
-│   └── analytics.json      # Eventos de analytics
+├── prisma/
+│   ├── schema.prisma  # Schema do banco de dados
+│   └── migrations/    # Histórico de migrations
 │
 └── app/               # (Reservado para módulos futuros)
 ```
@@ -122,62 +125,53 @@ interface QueueItem {
 }
 ```
 
-## 🗃️ Migração para PostgreSQL (Planejado)
+## 🗃️ PostgreSQL + Prisma
 
-### Instalação do Prisma
+### Setup do Banco
 
 ```bash
-npm install prisma @prisma/client
-npx prisma init
+# Subir PostgreSQL via Docker
+docker-compose up -d
+
+# Rodar migrations
+npx prisma migrate dev
+
+# Ver dados no Prisma Studio
+npx prisma studio
 ```
 
-### Schema (Planejado)
+### Schema Atual
 
 ```prisma
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String?  @unique
-  createdAt DateTime @default(now())
-  scores    Score[]
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String?
+  phone        String?
+  canHost      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  ownedRooms   Room[]   @relation("RoomOwner")
 }
 
 model Room {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  createdAt DateTime @default(now())
-  sessions  Session[]
-}
-
-model Session {
-  id        String   @id @default(uuid())
-  roomId    String
-  room      Room     @relation(fields: [roomId], references: [id])
-  startedAt DateTime @default(now())
-  endedAt   DateTime?
-  scores    Score[]
+  id             String   @id @default(uuid())
+  code           String   @unique
+  ownerId        String
+  owner          User     @relation("RoomOwner", fields: [ownerId], references: [id])
+  tvPasswordHash String
+  uniqueVisitors Int      @default(0)
+  createdAt      DateTime @default(now())
 }
 
 model Song {
-  id        String   @id @default(uuid())
-  videoId   String   @unique
-  title     String
-  playCount Int      @default(0)
-  addedBy   String
-  createdAt DateTime @default(now())
-}
-
-model Score {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  sessionId String
-  session   Session  @relation(fields: [sessionId], references: [id])
-  songTitle String
-  score     Int
-  isDuet    Boolean  @default(false)
-  partnerId String?
-  createdAt DateTime @default(now())
+  id           String    @id @default(uuid())
+  videoId      String    @unique
+  title        String
+  addedBy      String
+  playCount    Int       @default(0)
+  lastPlayedAt DateTime?
+  createdAt    DateTime  @default(now())
 }
 ```
 
@@ -187,11 +181,14 @@ model Score {
 # Servidor
 PORT=8787
 
-# Banco de dados (quando implementado)
-DATABASE_URL=postgresql://user:password@localhost:5432/karaokeando
+# Banco de dados
+DATABASE_URL=postgresql://karaokeando:karaokeando@localhost:5433/karaokeando
 
-# Dashboard
-DASHBOARD_KEY=sua-chave-admin
+# Autenticação
+JWT_SECRET=sua-chave-secreta-jwt
+
+# Admin Dashboard
+ADMIN_KEY=chave-admin-dashboard
 ```
 
 ## 📦 Dependências
@@ -201,12 +198,15 @@ DASHBOARD_KEY=sua-chave-admin
 - `fastify` - Framework HTTP rápido
 - `@fastify/cors` - CORS middleware
 - `@fastify/websocket` - Suporte WebSocket
-- _(Em breve)_ `@prisma/client` - Cliente do banco
+- `@prisma/client` - Cliente do banco
+- `jsonwebtoken` - Autenticação JWT
+- `bcrypt` - Hash de senhas
 
 ### Desenvolvimento
 
 - `tsx` - Executor TypeScript
 - `typescript` - Compilador
+- `prisma` - CLI do Prisma
 
 ## 🏥 Health Check
 

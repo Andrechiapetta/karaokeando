@@ -5,10 +5,6 @@ import websocket from "@fastify/websocket";
 import type { WebSocket } from "ws";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-import { trackEvent, analytics } from "./analytics.js";
 import authRoutes from "./routes/auth.js";
 import roomRoutes, {
   setRoomCallbacks,
@@ -16,6 +12,13 @@ import roomRoutes, {
 } from "./routes/rooms.js";
 import { verifyToken, UserTokenPayload, TvTokenPayload } from "./lib/auth.js";
 import prisma from "./lib/prisma.js";
+import {
+  addSongToLibrary,
+  incrementPlayCount,
+  getSongLibrary as getSongLibraryFromDb,
+  getTopSongs as getTopSongsFromDb,
+  removeSongFromLibrary,
+} from "./lib/songs.js";
 
 const execAsync = promisify(exec);
 
@@ -34,14 +37,6 @@ interface QueueItem {
   title: string;
   requestedBy: string;
   singers: Singer[]; // All singers with their IDs
-}
-
-interface SavedSong {
-  id: string;
-  videoId: string;
-  title: string;
-  addedBy: string;
-  savedAt: number;
 }
 
 interface RankingEntry {
@@ -75,51 +70,11 @@ interface RoomConnections {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Persistent Storage (JSON file)
-// ─────────────────────────────────────────────────────────────
-
-// Use the backend directory for data storage (works with both tsx and compiled)
-const DATA_DIR = join(process.cwd(), "data");
-const LIBRARY_FILE = join(DATA_DIR, "song-library.json");
-
-// Ensure data directory exists on startup
-if (!existsSync(DATA_DIR)) {
-  mkdirSync(DATA_DIR, { recursive: true });
-  console.log(`📁 Created data directory: ${DATA_DIR}`);
-}
-
-function loadSongLibrary(): SavedSong[] {
-  try {
-    if (existsSync(LIBRARY_FILE)) {
-      const data = readFileSync(LIBRARY_FILE, "utf-8");
-      const songs = JSON.parse(data);
-      console.log(`📚 Loaded ${songs.length} songs from: ${LIBRARY_FILE}`);
-      return songs;
-    }
-    console.log(`📚 No library file found, starting fresh`);
-  } catch (err) {
-    console.error("Error loading song library:", err);
-  }
-  return [];
-}
-
-function saveSongLibrary(songs: SavedSong[]): void {
-  try {
-    writeFileSync(LIBRARY_FILE, JSON.stringify(songs, null, 2));
-    console.log(`💾 Saved ${songs.length} songs to library`);
-  } catch (err) {
-    console.error("Error saving song library:", err);
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// State (in-memory for rooms, persistent for library)
+// State (in-memory for rooms only - songs now in database)
 // ─────────────────────────────────────────────────────────────
 
 const rooms = new Map<string, RoomState>();
 const connections = new Map<string, RoomConnections>();
-// Global song library (loaded from file, saved on changes)
-const songLibrary: SavedSong[] = loadSongLibrary();
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -327,7 +282,6 @@ async function getOrRestoreRoom(roomCode: string): Promise<RoomState | null> {
       participants: new Map(),
       recentParticipants: new Map(),
     });
-    console.log(`🔄 Restored room ${code} from database`);
   }
 
   return room;
@@ -335,10 +289,6 @@ async function getOrRestoreRoom(roomCode: string): Promise<RoomState | null> {
 
 function broadcastParticipants(roomCode: string) {
   const participants = getParticipantsList(roomCode);
-  console.log(
-    `[WS] Broadcasting participants for ${roomCode}:`,
-    participants.map(p => p.name)
-  );
   broadcast(roomCode, {
     type: "PARTICIPANTS",
     participants,
@@ -381,7 +331,6 @@ setRoomCallbacks({
         participants: new Map(),
         recentParticipants: new Map(),
       });
-      trackEvent("room_created", roomCode);
     }
   },
 });
@@ -453,27 +402,12 @@ app.post<{
   };
   room.queue.push(item);
 
-  // Auto-save to global library if not already there
-  if (!songLibrary.some(s => s.videoId === videoId)) {
-    songLibrary.push({
-      id: randomId(),
-      videoId,
-      title,
-      addedBy: requestedBy,
-      savedAt: Date.now(),
-    });
-    saveSongLibrary(songLibrary);
-  }
+  // Auto-save to database library (upsert - creates if not exists)
+  addSongToLibrary(videoId, title, requestedBy).catch(() => {
+    // Silent fail - song still plays even if library save fails
+  });
 
   broadcast(room.code, { type: "STATE", state: getRoomState(room) });
-
-  // Track analytics
-  trackEvent("song_enqueued", room.code, {
-    videoId,
-    title,
-    requestedBy,
-    singers: singers.map(s => s.name),
-  });
 
   return { ok: true, itemId: item.id };
 });
@@ -487,15 +421,6 @@ app.post<{ Params: { roomCode: string } }>(
 
     room.nowPlaying = room.queue.shift() || null;
     broadcast(room.code, { type: "STATE", state: getRoomState(room) });
-
-    // Track analytics
-    if (room.nowPlaying) {
-      trackEvent("song_started", room.code, {
-        videoId: room.nowPlaying.videoId,
-        title: room.nowPlaying.title,
-        singers: room.nowPlaying.singers,
-      });
-    }
 
     // Auto-play after a delay to give TV time to create the player
     if (room.nowPlaying) {
@@ -689,21 +614,15 @@ app.post<{ Params: { roomCode: string }; Body: { requester?: string } }>(
       title: room.nowPlaying.title,
     });
 
-    // Track analytics (save before nulling nowPlaying)
+    // Increment play count in database
     const finalizedVideoId = room.nowPlaying.videoId;
-    const finalizedTitle = room.nowPlaying.title;
+    incrementPlayCount(finalizedVideoId).catch(() => {
+      // Silent fail - finalize still works even if count fails
+    });
 
     // NÃO auto-avança para próxima - espera alguém apertar "Começar"
     room.nowPlaying = null;
     broadcast(room.code, { type: "STATE", state: getRoomState(room) });
-
-    // Track analytics
-    trackEvent("song_finalized", req.params.roomCode, {
-      videoId: finalizedVideoId,
-      title: finalizedTitle,
-      score,
-      singers: singerNames,
-    });
 
     return { ok: true, score };
   }
@@ -866,8 +785,6 @@ async function searchWithYtDlp(query: string): Promise<YouTubeSearchResult[]> {
   const safeQuery = query.replace(/[`$\\]/g, "\\$&").replace(/"/g, '\\"');
   const cmd = `yt-dlp -j --no-playlist --flat-playlist "ytsearch${numResults}:${safeQuery}"`;
 
-  console.log("Running yt-dlp search:", cmd);
-
   try {
     const { stdout } = await execAsync(cmd, { timeout: 30000 }); // 30s timeout
 
@@ -888,10 +805,8 @@ async function searchWithYtDlp(query: string): Promise<YouTubeSearchResult[]> {
       }
     }
 
-    console.log(`yt-dlp found ${results.length} results`);
     return results;
-  } catch (err) {
-    console.error("yt-dlp search error:", err);
+  } catch {
     return [];
   }
 }
@@ -909,8 +824,7 @@ app.get<{ Querystring: { q: string } }>(
 
       const results = await searchWithYtDlp(searchTerm);
       return results;
-    } catch (error) {
-      console.error("YouTube search error:", error);
+    } catch {
       return reply.code(500).send({ error: "search_failed" });
     }
   }
@@ -926,7 +840,6 @@ app.get<{ Querystring: { videoId: string } }>(
     try {
       // Use yt-dlp to get video title
       const cmd = `yt-dlp -j --no-playlist "https://www.youtube.com/watch?v=${videoId}"`;
-      console.log("Getting video info:", cmd);
 
       const { stdout } = await execAsync(cmd, { timeout: 15000 });
       const info = JSON.parse(stdout);
@@ -937,8 +850,7 @@ app.get<{ Querystring: { videoId: string } }>(
         thumbnail: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
         channelTitle: info.channel || info.uploader || "",
       };
-    } catch (err) {
-      console.error("Error getting video info:", err);
+    } catch {
       // Return basic info even if yt-dlp fails
       return {
         videoId,
@@ -951,13 +863,21 @@ app.get<{ Querystring: { videoId: string } }>(
 );
 
 // ─────────────────────────────────────────────────────────────
-// Song Library API (global, shared by all users)
+// Song Library API (global, shared by all users) - uses database
 // ─────────────────────────────────────────────────────────────
 
 // List all songs in library
 app.get("/api/songs", async () => {
-  // Return sorted by most recently added
-  return [...songLibrary].sort((a, b) => b.savedAt - a.savedAt);
+  const songs = await getSongLibraryFromDb();
+  // Map to expected format
+  return songs.map(s => ({
+    id: s.id,
+    videoId: s.videoId,
+    title: s.title,
+    addedBy: s.addedBy,
+    savedAt: s.createdAt.getTime(),
+    playCount: s.playCount,
+  }));
 });
 
 // Save a song to library
@@ -970,122 +890,65 @@ app.post<{
 
   if (!videoId) return reply.code(400).send({ error: "missing_videoId" });
 
-  // Avoid duplicates
-  if (songLibrary.some(s => s.videoId === videoId)) {
-    return { ok: true, alreadySaved: true };
-  }
-
-  const song: SavedSong = {
-    id: randomId(),
-    videoId,
-    title,
-    addedBy,
-    savedAt: Date.now(),
-  };
-  songLibrary.push(song);
-  saveSongLibrary(songLibrary);
+  const song = await addSongToLibrary(videoId, title, addedBy);
   return { ok: true, song };
 });
 
-// Delete a song from library
+// Delete a song from library (by videoId now, not id)
 app.delete<{ Params: { songId: string } }>(
   "/api/songs/:songId",
   async (req, reply) => {
     const songId = req.params.songId;
 
-    const idx = songLibrary.findIndex(s => s.id === songId);
-    if (idx === -1) return reply.code(404).send({ error: "not_found" });
+    // Try to find by id first, then by videoId
+    const deleted = await removeSongFromLibrary(songId);
+    if (!deleted) return reply.code(404).send({ error: "not_found" });
 
-    songLibrary.splice(idx, 1);
-    saveSongLibrary(songLibrary);
     return { ok: true };
   }
 );
 
 // ─────────────────────────────────────────────────────────────
-// Analytics Endpoints
+// Analytics Endpoints (simplified)
 // ─────────────────────────────────────────────────────────────
 
-const ANALYTICS_ADMIN_KEY = process.env.ANALYTICS_ADMIN_KEY || "admin123";
-
-// Public: Top songs (everyone can see)
-app.get<{ Querystring: { limit?: string; period?: string } }>(
+// Top songs (from database)
+app.get<{ Querystring: { limit?: string; key?: string } }>(
   "/api/analytics/top-songs",
   async req => {
     const limit = parseInt(req.query.limit || "20", 10);
-    const period = req.query.period as
-      | "today"
-      | "7d"
-      | "30d"
-      | "all"
-      | undefined;
+    const songs = await getTopSongsFromDb(limit);
     return {
-      topSongs: analytics.getTopSongs(limit, period ? { period } : undefined),
+      topSongs: songs.map(s => ({
+        videoId: s.videoId,
+        title: s.title,
+        playCount: s.playCount,
+      })),
     };
   }
 );
 
-// Private: Full summary (add auth later when you have accounts)
-app.get<{ Querystring: { key?: string } }>(
-  "/api/analytics/summary",
-  async (req, reply) => {
-    if (req.query.key !== ANALYTICS_ADMIN_KEY) {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
-    return analytics.getSummary();
-  }
-);
-
-// Private: Detailed analytics with all data for dashboard
-app.get<{ Querystring: { key?: string; period?: string; days?: string } }>(
-  "/api/analytics/detailed",
-  async (req, reply) => {
-    if (req.query.key !== ANALYTICS_ADMIN_KEY) {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
-    const period = req.query.period as
-      | "today"
-      | "7d"
-      | "30d"
-      | "all"
-      | undefined;
-    return analytics.getDetailedAnalytics(period ? { period } : undefined);
-  }
-);
-
-// Private: Daily stats for charts
-app.get<{ Querystring: { key?: string; days?: string } }>(
-  "/api/analytics/daily",
-  async (req, reply) => {
-    if (req.query.key !== ANALYTICS_ADMIN_KEY) {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
-    const days = parseInt(req.query.days || "30", 10);
-    return { dailyStats: analytics.getDailyStats(days) };
-  }
-);
-
-// Private: Active rooms (rooms with activity in last hour)
+// Active rooms (admin only)
 app.get<{ Querystring: { key?: string } }>(
   "/api/analytics/active-rooms",
   async (req, reply) => {
-    if (req.query.key !== ANALYTICS_ADMIN_KEY) {
-      return reply.code(401).send({ error: "unauthorized" });
+    const key = req.query.key;
+    if (!key || key !== process.env.ADMIN_KEY) {
+      return reply.code(401).send({ error: "Unauthorized" });
     }
-    // Get actual active rooms from memory
-    const activeRoomCodes = Array.from(rooms.keys());
-    const activeRoomDetails = activeRoomCodes.map(code => {
-      const room = rooms.get(code)!;
+
+    const activeRooms = Array.from(rooms.entries()).map(([code, room]) => {
       const conns = connections.get(code);
       return {
         code,
         createdAt: room.createdAt,
         queueLength: room.queue.length,
         nowPlaying: room.nowPlaying?.title || null,
-        participantsCount: conns ? conns.participants.size : 0,
+        participantsCount: conns?.participants.size || 0,
       };
     });
-    return { activeRooms: activeRoomDetails };
+
+    return { activeRooms };
   }
 );
 
@@ -1176,12 +1039,6 @@ app.get<{ Params: { roomCode: string } }>(
 
               // Record room visit (async, don't wait)
               recordRoomVisit(roomCode, odUserId).catch(() => {});
-
-              trackEvent("user_joined", roomCode, {
-                userName: name,
-                odUserId,
-                role,
-              });
             }
           } else {
             // Legacy flow: no token (for users without accounts yet)
@@ -1214,11 +1071,6 @@ app.get<{ Params: { roomCode: string } }>(
                 conns.participants.set(socket, { id: odUserId, name });
                 conns.recentParticipants.delete(odUserId);
                 broadcastParticipants(roomCode);
-                trackEvent("user_joined", roomCode, {
-                  userName: name,
-                  odUserId,
-                  role,
-                });
               }
             }
           }
@@ -1261,11 +1113,6 @@ app.get<{ Params: { roomCode: string } }>(
           });
           // Broadcast updated participants list
           broadcastParticipants(roomCode);
-          // Track analytics
-          trackEvent("user_left", roomCode, {
-            userName: participantInfo.name,
-            odUserId: participantInfo.id,
-          });
         }
       }
     });

@@ -693,7 +693,6 @@ export default function RoomMobile() {
     if (!code || !addSongModal) return;
 
     const partner = participants.find(p => p.id === modalPartner);
-    const wasFromSearch = addSongModal.source === "search";
 
     setAdding(addSongModal.videoId);
     await enqueue(

@@ -265,86 +265,12 @@ export async function getTopSongs(
   return data.topSongs || [];
 }
 
-export interface AnalyticsSummary {
-  totalRooms: number;
-  totalSongsPlayed: number;
-  totalUsers: number;
-  roomsToday: number;
-  roomsThisWeek: number;
-  roomsThisMonth: number;
-  songsToday: number;
-  songsThisWeek: number;
-  songsThisMonth: number;
-  avgSongsPerRoom: number;
-  topSongs: TopSong[];
-  roomsLastWeek: number;
-  songsLastWeek: number;
-  roomsGrowth: number;
-  songsGrowth: number;
-}
-
-export interface DailyStats {
-  date: string;
-  rooms: number;
-  songs: number;
-  users: number;
-}
-
-export interface TopUser {
-  name: string;
-  songCount: number;
-}
-
-export interface PeakHour {
-  hour: number;
-  count: number;
-}
-
-export interface DetailedAnalytics {
-  summary: AnalyticsSummary;
-  dailyStats: DailyStats[];
-  topSongs: TopSong[];
-  topUsers: TopUser[];
-  peakHours: PeakHour[];
-}
-
 export interface ActiveRoom {
   code: string;
   createdAt: number;
   queueLength: number;
   nowPlaying: string | null;
   participantsCount: number;
-}
-
-export async function getAnalyticsSummary(
-  adminKey: string
-): Promise<AnalyticsSummary | null> {
-  const res = await fetch(`${API_BASE}/api/analytics/summary?key=${adminKey}`);
-  if (!res.ok) return null;
-  return res.json();
-}
-
-export async function getDetailedAnalytics(
-  adminKey: string,
-  period?: string
-): Promise<DetailedAnalytics | null> {
-  const params = new URLSearchParams({ key: adminKey });
-  if (period) params.set("period", period);
-  const res = await fetch(`${API_BASE}/api/analytics/detailed?${params}`);
-  if (!res.ok) return null;
-  return res.json();
-}
-
-export async function getDailyStats(
-  adminKey: string,
-  days = 30
-): Promise<DailyStats[]> {
-  const res = await fetch(
-    `${API_BASE}/api/analytics/daily?key=${adminKey}&days=${days}`
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.dailyStats || [];
 }
 
 export async function getActiveRooms(adminKey: string): Promise<ActiveRoom[]> {

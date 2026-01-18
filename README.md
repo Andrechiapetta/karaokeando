@@ -21,8 +21,8 @@ karaokeando/
 ├── backend/          # API Node.js + TypeScript
 │   ├── src/
 │   │   ├── server.ts    # Servidor Fastify + WebSocket
-│   │   └── analytics.ts # Tracking de eventos
-│   └── data/            # Dados persistidos (JSON → PostgreSQL)
+│   │   └── lib/         # Módulos (auth, songs, etc.)
+│   └── prisma/          # Schema e migrations
 │
 ├── frontend/         # React + Vite + TypeScript
 │   ├── src/
@@ -32,7 +32,7 @@ karaokeando/
 │   │   └── api.ts       # Cliente API + WebSocket
 │   └── public/          # Assets estáticos
 │
-└── database/         # (Em breve) PostgreSQL + Prisma
+└── docker-compose.yml   # PostgreSQL local
 ```
 
 ## 🚀 Quick Start
@@ -41,7 +41,7 @@ karaokeando/
 
 - Node.js 20+
 - npm 10+
-- (Em breve) PostgreSQL 15+
+- Docker (para PostgreSQL) ou PostgreSQL 16+
 
 ### 1. Backend
 
@@ -73,15 +73,16 @@ Aplicação em `http://localhost:3000`
 - **Solo ou Dueto** - Escolha cantar sozinho ou com um parceiro da sala
 - **Ranking individual** - Pontuação acumulada por participante
 - **Ranking de duplas** - Ranking separado para duetos
-- **Biblioteca de músicas** - Músicas adicionadas ficam salvas para todos
-- **Mais tocadas** - Lista das músicas mais populares
-- **Dashboard admin** - Painel de analytics e gestão
+- **Biblioteca de músicas** - Músicas adicionadas ficam salvas no banco
+- **Mais tocadas** - Lista das músicas mais populares (persistido)
+- **Dashboard admin** - Painel com salas ativas e top músicas
 - **Identificação persistente** - ID único por dispositivo, nome salvo
+- **PostgreSQL** - Persistência robusta com Prisma ORM
+- **Sistema de autenticação** - JWT para hosts e acesso TV
 
 ### Roadmap 🚧
 
-- [ ] **Banco de dados PostgreSQL** - Persistência robusta
-- [ ] **Sistema de usuários** - Cadastro, login, perfil
+- [ ] **Sistema de usuários completo** - Cadastro, login, perfil
 - [ ] **Histórico de sessões** - Ver festas anteriores
 - [ ] **Favoritos pessoais** - Cada usuário salva suas músicas
 - [ ] **Conquistas/Badges** - Gamificação
@@ -91,15 +92,16 @@ Aplicação em `http://localhost:3000`
 
 ### Backend
 
-| Tecnologia              | Uso                   |
-| ----------------------- | --------------------- |
-| Node.js                 | Runtime               |
-| TypeScript              | Tipagem               |
-| Fastify                 | Framework HTTP        |
-| @fastify/websocket      | Comunicação real-time |
-| yt-dlp                  | Busca no YouTube      |
-| _(Em breve)_ Prisma     | ORM                   |
-| _(Em breve)_ PostgreSQL | Banco de dados        |
+| Tecnologia         | Uso                   |
+| ------------------ | --------------------- |
+| Node.js            | Runtime               |
+| TypeScript         | Tipagem               |
+| Fastify            | Framework HTTP        |
+| @fastify/websocket | Comunicação real-time |
+| yt-dlp             | Busca no YouTube      |
+| Prisma             | ORM                   |
+| PostgreSQL 16      | Banco de dados        |
+| JWT                | Autenticação          |
 
 ### Frontend
 
@@ -110,35 +112,28 @@ Aplicação em `http://localhost:3000`
 | Vite         | Build tool |
 | React Router | Navegação  |
 
-## 📁 Estrutura de Dados (Atual)
+## 📁 Estrutura de Dados
 
-Atualmente os dados são persistidos em JSON:
-
-```
-backend/data/
-├── song-library.json   # Biblioteca de músicas salvas
-└── analytics.json      # Eventos de analytics
-```
-
-### Migração para PostgreSQL (Planejado)
+Dados persistidos no PostgreSQL via Prisma:
 
 ```
-database/
-├── prisma/
-│   └── schema.prisma   # Schema do banco
-├── migrations/         # Histórico de migrations
-└── seed.ts            # Dados iniciais
+backend/prisma/
+├── schema.prisma       # Schema do banco
+└── migrations/         # Histórico de migrations
 ```
 
-**Entidades planejadas:**
+**Entidades implementadas:**
 
-- `User` - Usuários cadastrados
-- `Room` - Salas de karaokê
-- `Session` - Sessões/festas
-- `Song` - Músicas da biblioteca
-- `QueueItem` - Itens na fila
-- `Score` - Pontuações
-- `DuetScore` - Pontuações de duplas
+- `User` - Usuários cadastrados (email, nome, senha)
+- `Room` - Salas de karaokê (código, hostId, tvToken)
+- `RoomVisit` - Histórico de visitas às salas
+- `Song` - Biblioteca de músicas (videoId, título, playCount)
+
+**Dados em memória (efêmeros por sessão):**
+
+- Fila de músicas da sala
+- Ranking da sessão (solo e duplas)
+- Conexões WebSocket
 
 ## 🔧 Variáveis de Ambiente
 
@@ -148,6 +143,14 @@ Criar arquivo `.env` na raiz do backend:
 # Servidor
 PORT=8787
 
+# Banco de dados
+DATABASE_URL=postgresql://karaokeando:karaokeando@localhost:5433/karaokeando
+
+# Autenticação
+JWT_SECRET=sua-chave-secreta-aqui
+
+# Admin
+ADMIN_KEY=chave-do-dashboard
 # (Em breve) Banco de dados
 DATABASE_URL=postgresql://user:password@localhost:5432/karaokeando
 

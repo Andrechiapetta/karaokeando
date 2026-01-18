@@ -215,97 +215,49 @@ export default async function roomRoutes(app: FastifyInstance) {
 
     return { rooms };
   });
-
-  // Record room visit (called internally or via API)
-  app.post<{ Params: { roomCode: string } }>(
-    "/api/rooms/:roomCode/visit",
-    async (request, reply) => {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return reply.code(401).send({ error: "unauthorized" });
-      }
-
-      const { roomCode } = request.params;
-
-      const room = await prisma.room.findUnique({
-        where: { code: roomCode.toUpperCase() },
-      });
-
-      if (!room) {
-        return reply.code(404).send({ error: "room_not_found" });
-      }
-
-      // Try to insert visit (will fail if already exists due to unique constraint)
-      try {
-        await prisma.roomVisit.create({
-          data: {
-            roomId: room.id,
-            userId: user.userId,
-          },
-        });
-
-        // Increment unique visitors counter
-        await prisma.room.update({
-          where: { id: room.id },
-          data: { uniqueVisitors: { increment: 1 } },
-        });
-
-        return { recorded: true, isNew: true };
-      } catch (error: any) {
-        // Unique constraint violation = already visited
-        if (error.code === "P2002") {
-          return { recorded: true, isNew: false };
-        }
-        throw error;
-      }
-    }
-  );
 }
 
+// In-memory Set to track visitors per room (resets on server restart)
+// Format: "ROOMCODE:userId"
+const visitedSet = new Set<string>();
+
 // Helper function to record visit (for use in WebSocket handler)
+// Uses in-memory Set to avoid duplicates, persists count to DB
 export async function recordRoomVisit(
   roomCode: string,
   odUserId: string
 ): Promise<boolean> {
+  const key = `${roomCode.toUpperCase()}:${odUserId}`;
+
+  // Already counted in this server session
+  if (visitedSet.has(key)) {
+    return false;
+  }
+
   const room = await prisma.room.findUnique({
     where: { code: roomCode.toUpperCase() },
   });
 
   if (!room) return false;
 
-  // Check if already visited first (avoids Prisma error log)
-  const existingVisit = await prisma.roomVisit.findUnique({
-    where: {
-      roomId_userId: {
-        roomId: room.id,
-        userId: odUserId,
-      },
-    },
+  // Mark as visited in memory
+  visitedSet.add(key);
+
+  // Increment counter in database
+  await prisma.room.update({
+    where: { id: room.id },
+    data: { uniqueVisitors: { increment: 1 } },
   });
 
-  if (existingVisit) {
-    return false; // Already visited
-  }
+  return true;
+}
 
-  try {
-    await prisma.roomVisit.create({
-      data: {
-        roomId: room.id,
-        userId: odUserId,
-      },
-    });
-
-    await prisma.room.update({
-      where: { id: room.id },
-      data: { uniqueVisitors: { increment: 1 } },
-    });
-
-    return true; // New visitor
-  } catch (error: any) {
-    // Race condition: another request created it between our check and create
-    if (error.code === "P2002") {
-      return false; // Already visited
+// Clear visits for a room (call when room is deleted or server restarts)
+export function clearRoomVisits(roomCode: string) {
+  const prefix = `${roomCode.toUpperCase()}:`;
+  for (const key of visitedSet) {
+    if (key.startsWith(prefix)) {
+      visitedSet.delete(key);
     }
-    throw error;
   }
 }

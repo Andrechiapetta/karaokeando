@@ -20,8 +20,7 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
 
   // Relations
-  ownedRooms Room[]      @relation("RoomOwner")
-  roomVisits RoomVisit[]
+  ownedRooms Room[] @relation("RoomOwner")
 
   @@map("users")
 }
@@ -35,22 +34,19 @@ model Room {
   createdAt      DateTime @default(now()) @map("created_at")
 
   // Relations
-  owner  User        @relation("RoomOwner", fields: [ownerId], references: [id])
-  visits RoomVisit[]
+  owner User @relation("RoomOwner", fields: [ownerId], references: [id])
 
   @@map("rooms")
 }
 
-model RoomVisit {
-  id          String   @id @default(uuid())
-  roomId      String   @map("room_id")
-  userId      String   @map("user_id")
-  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+model Song {
+  id           String    @id @default(uuid())
+  videoId      String    @unique @map("video_id")
+  title        String
+  addedBy      String    @map("added_by")
+  playCount    Int       @default(0) @map("play_count")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastPlayedAt DateTime? @map("last_played_at")
 
-  // Relations
-  room Room @relation(fields: [roomId], references: [id])
-  user User @relation(fields: [userId], references: [id])
-
-  @@unique([roomId, userId])
-  @@map("room_visits")
+  @@map("songs")
 }
