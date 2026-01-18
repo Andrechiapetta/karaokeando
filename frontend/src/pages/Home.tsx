@@ -16,8 +16,10 @@ export default function Home() {
   const [myRooms, setMyRooms] = useState<MyRoom[]>([]);
   const [loadingMyRooms, setLoadingMyRooms] = useState(false);
 
-  // Estado para entrar em sala
-  const [joinCode, setJoinCode] = useState("");
+  // Estado para entrar em sala - pré-preenche com última sala visitada
+  const [joinCode, setJoinCode] = useState(() => {
+    return localStorage.getItem("karaokeando_last_room") || "";
+  });
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinMode, setJoinMode] = useState<"participant" | "tv">("participant");
@@ -339,6 +341,9 @@ export default function Home() {
       {/* Entrar em sala */}
       <div className="card">
         <h2>🎵 Entrar em uma sala</h2>
+        <p style={{ color: "#888", fontSize: "0.9rem", marginBottom: 16 }}>
+          Digite o código ou escaneie o QR code na TV
+        </p>
 
         <input
           placeholder="Código da sala (ex: ABC12)"

@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function GuestRegister() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { registerGuest } = useAuth();
 
-  // Get redirect info from location state
-  const redirectTo = (location.state as any)?.redirectTo || "/";
-  const roomCode = (location.state as any)?.roomCode;
+  // Get redirect info from query params OR location state
+  const roomCode =
+    searchParams.get("redirect") ||
+    (location.state as any)?.roomCode ||
+    null;
+  const redirectTo = roomCode ? `/room/${roomCode}` : (location.state as any)?.redirectTo || "/";
 
   const [name, setName] = useState(() => {
     return localStorage.getItem("karaokeando_name") || "";
@@ -45,6 +49,8 @@ export default function GuestRegister() {
 
       // Redirect to intended destination
       if (roomCode) {
+        // Salvar última sala para acesso rápido
+        localStorage.setItem("karaokeando_last_room", roomCode);
         navigate(`/room/${roomCode}`);
       } else {
         navigate(redirectTo);

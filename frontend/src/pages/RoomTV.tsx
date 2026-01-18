@@ -755,6 +755,38 @@ export default function RoomTV() {
               Pular <IconSkipForward size={16} />
             </span>
           </button>
+
+          {/* QR Code discreto no canto inferior esquerdo */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: 16,
+              left: 16,
+              background: "rgba(255,255,255,0.95)",
+              padding: 8,
+              borderRadius: 8,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              opacity: 0.7,
+              transition: "opacity 0.2s",
+              zIndex: 10,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+          >
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(
+                window.location.origin + "/join/" + code
+              )}`}
+              alt="QR Code"
+              loading="lazy"
+              style={{ width: 80, height: 80, display: "block" }}
+            />
+            <div style={{ color: "#000", fontSize: "0.65rem", fontWeight: 600, marginTop: 4 }}>
+              {code}
+            </div>
+          </div>
         </div>
       )}
 

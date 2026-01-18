@@ -457,6 +457,13 @@ export default function RoomMobile() {
       .catch(() => {});
   }, []);
 
+  // Salvar última sala visitada
+  useEffect(() => {
+    if (code) {
+      localStorage.setItem("karaokeando_last_room", code);
+    }
+  }, [code]);
+
   useEffect(() => {
     if (!code || !user) return;
 
