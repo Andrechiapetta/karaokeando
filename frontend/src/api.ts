@@ -1,4 +1,16 @@
-const API_BASE = "";
+// Verifica se é um IP de rede local (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+function isPrivateIP(hostname: string): boolean {
+  return (
+    hostname.startsWith("192.168.") ||
+    hostname.startsWith("10.") ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
+  );
+}
+
+// Em dev na rede local, conecta direto no backend. Caso contrário, URL relativa.
+const API_BASE = isPrivateIP(window.location.hostname)
+  ? `http://${window.location.hostname}:8787`
+  : "";
 
 // ─────────────────────────────────────────────────────────────
 // YouTube Search
@@ -205,6 +217,12 @@ export async function deleteSong(songId: string) {
   return res.json();
 }
 
+// Em dev na rede local, conecta direto no backend:8787. Caso contrário, usa o host atual.
+function getWebSocketHost(): string {
+  const { hostname, host } = window.location;
+  return isPrivateIP(hostname) ? `${hostname}:8787` : host;
+}
+
 export function connectWS(
   roomCode: string,
   role: "tv" | "mobile",
@@ -213,7 +231,8 @@ export function connectWS(
   token?: string | null
 ): WebSocket {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${protocol}//${window.location.host}/ws/${roomCode}`;
+  const wsHost = getWebSocketHost();
+  const url = `${protocol}//${wsHost}/ws/${roomCode}`;
   console.log("[WS] Connecting to", url);
   const ws = new WebSocket(url);
 

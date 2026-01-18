@@ -5,11 +5,16 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    host: true, // Expõe na rede local (0.0.0.0)
     proxy: {
-      "/api": "http://localhost:8787",
+      "/api": {
+        target: "http://127.0.0.1:8787",
+        changeOrigin: true,
+      },
       "/ws": {
-        target: "ws://localhost:8787",
+        target: "ws://127.0.0.1:8787",
         ws: true,
+        changeOrigin: true,
       },
     },
   },
