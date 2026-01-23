@@ -8,13 +8,11 @@ function isPrivateIP(hostname: string): boolean {
 }
 
 // Em dev na rede local, conecta direto no backend. Caso contrário, URL relativa ou variável de ambiente.
-const API_BASE =
+export const API_BASE =
   import.meta.env.VITE_API_URL ||
   (isPrivateIP(window.location.hostname)
     ? `http://${window.location.hostname}:8787`
     : "");
-console.log("🚀 ~ import.meta.env.VITE_API_URL:", import.meta.env.VITE_API_URL);
-console.log("🚀 ~ API_BASE:", API_BASE);
 
 // ─────────────────────────────────────────────────────────────
 // YouTube Search

@@ -5,8 +5,8 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
+import { API_BASE } from "../api";
 
-const API_BASE = "";
 const TOKEN_KEY = "karaokeando_token";
 
 // Types

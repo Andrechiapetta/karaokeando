@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { getActiveRooms, type ActiveRoom } from "../api";
+import { getActiveRooms, type ActiveRoom, API_BASE } from "../api";
 import "./Dashboard.css";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 interface TopSong {
   videoId: string;
