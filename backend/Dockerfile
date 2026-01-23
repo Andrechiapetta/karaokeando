@@ -34,8 +34,10 @@ RUN npm run build
 # Remove devDependencies after build
 RUN npm prune --production
 
-# Expose port
+# Expose port (Railway will use PORT env var)
 EXPOSE 8787
 
-# Start the server
-CMD ["npm", "start"]
+# Run migrations and start the server
+# - prisma migrate deploy: applies pending migrations (safe for production, no prompts)
+# - node dist/server.js: starts the backend
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
