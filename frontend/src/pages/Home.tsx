@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, getToken } from "../context/AuthContext";
-import { getState } from "../api";
+import { getState, API_BASE } from "../api";
 
 interface MyRoom {
   code: string;
@@ -45,7 +45,7 @@ export default function Home() {
     if (user?.canHost) {
       setLoadingMyRooms(true);
       const token = getToken();
-      fetch("/api/rooms/my-rooms", {
+      fetch(`${API_BASE}/api/rooms/my-rooms`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(res => res.json())
@@ -105,11 +105,14 @@ export default function Home() {
     setTvPasswordError(null);
 
     try {
-      const res = await fetch(`/api/rooms/${pendingRoomCode}/tv/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tvPassword: tvPassword }),
-      });
+      const res = await fetch(
+        `${API_BASE}/api/rooms/${pendingRoomCode}/tv/login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tvPassword: tvPassword }),
+        }
+      );
 
       const data = await res.json();
 
@@ -130,7 +133,7 @@ export default function Home() {
   const openMyRoomAsTV = (code: string) => {
     // Para sala própria, gerar token direto no backend
     const token = getToken();
-    fetch(`/api/rooms/${code}/tv/owner-access`, {
+    fetch(`${API_BASE}/api/rooms/${code}/tv/owner-access`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     })

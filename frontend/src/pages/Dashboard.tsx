@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { getActiveRooms, type ActiveRoom, API_BASE } from "../api";
 import "./Dashboard.css";
 
-
 interface TopSong {
   videoId: string;
   title: string;

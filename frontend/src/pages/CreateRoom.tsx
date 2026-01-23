@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, getToken } from "../context/AuthContext";
+import { API_BASE } from "../api";
 
 export default function CreateRoom() {
   const navigate = useNavigate();
@@ -34,7 +35,7 @@ export default function CreateRoom() {
 
     try {
       const token = getToken();
-      const res = await fetch("/api/rooms", {
+      const res = await fetch(`${API_BASE}/api/rooms`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -47,18 +48,18 @@ export default function CreateRoom() {
 
       if (res.ok) {
         // Save TV token for this room
-        const tvRes = await fetch(`/api/rooms/${data.roomCode}/tv/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tvPassword }),
-        });
+        const tvRes = await fetch(
+          `${API_BASE}/api/rooms/${data.roomCode}/tv/login`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tvPassword }),
+          }
+        );
 
         if (tvRes.ok) {
           const tvData = await tvRes.json();
-          localStorage.setItem(
-            `tvToken_${data.roomCode}`,
-            tvData.tvToken
-          );
+          localStorage.setItem(`tvToken_${data.roomCode}`, tvData.tvToken);
         }
 
         // Navigate to TV view

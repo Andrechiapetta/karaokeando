@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { API_BASE } from "../api";
 
 export default function TvLogin() {
   const { code } = useParams<{ code: string }>();
@@ -14,7 +15,7 @@ export default function TvLogin() {
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/rooms/${code}/tv/login`, {
+      const res = await fetch(`${API_BASE}/api/rooms/${code}/tv/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tvPassword }),
