@@ -1,6 +1,12 @@
 import { pikaraokeScoreReviews } from "./pikaraokeReviews";
 
-export type ScoreBucket = "low" | "mid" | "high";
+export type ScoreBucket =
+  | "low"
+  | "mid"
+  | "good"
+  | "high"
+  | "almostPerfect"
+  | "perfect";
 
 export interface ScoreData {
   applause: "applause-l.mp3" | "applause-m.mp3" | "applause-h.mp3";
@@ -9,6 +15,7 @@ export interface ScoreData {
 }
 
 // Exact port of `pikaraoke/static/score.js` with personalized name support
+// Extended with almostPerfect (99) and perfect (100) buckets
 export function getScoreData(
   scoreValue: number,
   singerName?: string
@@ -19,7 +26,21 @@ export function getScoreData(
   let applause: ScoreData["applause"];
   let reviewTemplate: string;
 
-  if (scoreValue < 30) {
+  if (scoreValue === 100) {
+    bucket = "perfect";
+    applause = "applause-h.mp3";
+    reviewTemplate =
+      pikaraokeScoreReviews.perfect[
+        Math.floor(Math.random() * pikaraokeScoreReviews.perfect.length)
+      ];
+  } else if (scoreValue === 99) {
+    bucket = "almostPerfect";
+    applause = "applause-h.mp3";
+    reviewTemplate =
+      pikaraokeScoreReviews.almostPerfect[
+        Math.floor(Math.random() * pikaraokeScoreReviews.almostPerfect.length)
+      ];
+  } else if (scoreValue < 30) {
     bucket = "low";
     applause = "applause-l.mp3";
     reviewTemplate =
@@ -32,6 +53,13 @@ export function getScoreData(
     reviewTemplate =
       pikaraokeScoreReviews.mid[
         Math.floor(Math.random() * pikaraokeScoreReviews.mid.length)
+      ];
+  } else if (scoreValue < 80) {
+    bucket = "good";
+    applause = "applause-m.mp3";
+    reviewTemplate =
+      pikaraokeScoreReviews.good[
+        Math.floor(Math.random() * pikaraokeScoreReviews.good.length)
       ];
   } else {
     bucket = "high";

@@ -98,12 +98,17 @@ function makeDuetKey(id1: string, id2: string): string {
   return [id1, id2].sort().join("|");
 }
 
+// Mesma fórmula do frontend (pikaraokeScore.ts) - port exato do PiKaraoke original
+// bias=2 significa sqrt(random), que puxa os valores pra cima mas não exagera
+// Máximo 99 normal, com 1% de chance de tirar 100 (perfeito!)
 function biasedPartyScore(): number {
-  const r = Math.random() * 100;
-  if (r < 3) return 45 + Math.floor(Math.random() * 15); // 45-59
-  if (r < 12) return 60 + Math.floor(Math.random() * 15); // 60-74
-  if (r < 40) return 75 + Math.floor(Math.random() * 15); // 75-89
-  return 90 + Math.floor(Math.random() * 11); // 90-100
+  // 1% de chance de score perfeito!
+  if (Math.random() < 0.01) return 100;
+
+  const random = Math.random();
+  const bias = 2;
+  const scoreValue = Math.pow(random, 1 / bias) * 100; // sqrt(random) * 100 → máx 99
+  return Math.floor(scoreValue);
 }
 
 function getRoomState(room: RoomState) {
