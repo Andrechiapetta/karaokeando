@@ -785,8 +785,14 @@ async function searchWithYtDlp(query: string): Promise<YouTubeSearchResult[]> {
   const safeQuery = query.replace(/[`$\\]/g, "\\$&").replace(/"/g, '\\"');
   const cmd = `yt-dlp -j --no-playlist --flat-playlist "ytsearch${numResults}:${safeQuery}"`;
 
+  console.log("[yt-dlp] Running search command:", cmd);
+
   try {
-    const { stdout } = await execAsync(cmd, { timeout: 30000 }); // 30s timeout
+    const { stdout, stderr } = await execAsync(cmd, { timeout: 30000 }); // 30s timeout
+
+    if (stderr) {
+      console.log("[yt-dlp] stderr:", stderr);
+    }
 
     const results: YouTubeSearchResult[] = [];
     for (const line of stdout.split("\n")) {
@@ -805,8 +811,10 @@ async function searchWithYtDlp(query: string): Promise<YouTubeSearchResult[]> {
       }
     }
 
+    console.log("[yt-dlp] Found", results.length, "results");
     return results;
-  } catch {
+  } catch (err) {
+    console.error("[yt-dlp] Search failed:", err);
     return [];
   }
 }
