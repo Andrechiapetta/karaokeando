@@ -13,6 +13,7 @@ const API_BASE =
   (isPrivateIP(window.location.hostname)
     ? `http://${window.location.hostname}:8787`
     : "");
+console.log("🚀 ~ import.meta.env.VITE_API_URL:", import.meta.env.VITE_API_URL);
 console.log("🚀 ~ API_BASE:", API_BASE);
 
 // ─────────────────────────────────────────────────────────────
