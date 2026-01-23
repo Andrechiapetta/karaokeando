@@ -7,10 +7,10 @@ function isPrivateIP(hostname: string): boolean {
   );
 }
 
-// Em dev na rede local, conecta direto no backend. Caso contrário, URL relativa.
-const API_BASE = isPrivateIP(window.location.hostname)
+// Em dev na rede local, conecta direto no backend. Caso contrário, URL relativa ou variável de ambiente.
+const API_BASE = import.meta.env.VITE_API_URL || (isPrivateIP(window.location.hostname)
   ? `http://${window.location.hostname}:8787`
-  : "";
+  : "");
 
 // ─────────────────────────────────────────────────────────────
 // YouTube Search
@@ -230,9 +230,18 @@ export function connectWS(
   onMessage: (msg: unknown) => void,
   token?: string | null
 ): WebSocket {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsHost = getWebSocketHost();
-  const url = `${protocol}//${wsHost}/ws/${roomCode}`;
+  let url = "";
+
+  if (API_BASE) {
+    // Se temos uma API_BASE definida (URL completa), usamos ela trocando http por ws
+    url = API_BASE.replace(/^http/, "ws") + `/ws/${roomCode}`;
+  } else {
+    // Fallback relativo (mesmo domínio do frontend)
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    url = `${protocol}//${host}/ws/${roomCode}`;
+  }
+
   console.log("[WS] Connecting to", url);
   const ws = new WebSocket(url);
 
