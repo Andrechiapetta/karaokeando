@@ -219,12 +219,6 @@ export async function deleteSong(songId: string) {
   return res.json();
 }
 
-// Em dev na rede local, conecta direto no backend:8787. Caso contrário, usa o host atual.
-function getWebSocketHost(): string {
-  const { hostname, host } = window.location;
-  return isPrivateIP(hostname) ? `${hostname}:8787` : host;
-}
-
 export function connectWS(
   roomCode: string,
   role: "tv" | "mobile",
