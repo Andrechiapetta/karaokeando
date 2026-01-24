@@ -715,7 +715,7 @@ export default function Home() {
                 fontSize: "0.9rem",
               }}
             >
-              Digite a senha da TV para acessar
+              Digite a senha da TV para acessar (6 caracteres)
             </p>
 
             {tvPasswordError && (
@@ -736,11 +736,12 @@ export default function Home() {
 
             <input
               type="text"
+              inputMode="text"
+              autoComplete="off"
+              autoCapitalize="off"
               value={tvPassword}
-              onChange={e =>
-                setTvPassword(e.target.value.replace(/\D/g, "").slice(0, 6))
-              }
-              placeholder="Senha (6 dígitos)"
+              onChange={e => setTvPassword(e.target.value.slice(0, 6))}
+              placeholder="Ex: abc123"
               autoFocus
               maxLength={6}
               style={{
