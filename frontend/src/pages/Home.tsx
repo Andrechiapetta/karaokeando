@@ -219,7 +219,7 @@ export default function Home() {
         🎤 Karaokêando
       </h1>
       <p style={{ textAlign: "center", color: "#888", marginBottom: 40 }}>
-        Karaokê em grupo, direto do celular
+        Karaokê em grupo, fácil e divertido
       </p>
 
       {/* Usuário logado */}
@@ -313,7 +313,7 @@ export default function Home() {
                         background: "#7c4dff",
                       }}
                     >
-                      📺 Abrir TV
+                      🖥️ Exibir
                     </button>
                     <button
                       onClick={() => navigate(`/room/${room.code}`)}
@@ -324,7 +324,7 @@ export default function Home() {
                         background: "#444",
                       }}
                     >
-                      🎤 Participar
+                      🎤 Cantar
                     </button>
                   </div>
                 </div>
@@ -345,7 +345,7 @@ export default function Home() {
       <div className="card">
         <h2>🎵 Entrar em uma sala</h2>
         <p style={{ color: "#888", fontSize: "0.9rem", marginBottom: 16 }}>
-          Digite o código ou escaneie o QR code na TV
+          Digite o código da sala ou escaneie o QR Code na TV
         </p>
 
         <input
@@ -360,41 +360,79 @@ export default function Home() {
         />
 
         {/* Seletor de modo */}
-        <p style={{ color: "#888", fontSize: "0.9rem", marginBottom: 8 }}>
-          Como você quer entrar?
+        <p
+          style={{
+            color: "#aaa",
+            fontSize: "0.95rem",
+            marginBottom: 14,
+            fontWeight: 500,
+          }}
+        >
+          O que você quer fazer?
         </p>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
           <button
             onClick={() => setJoinMode("participant")}
             style={{
               flex: 1,
-              padding: "12px",
-              background: joinMode === "participant" ? "#7c4dff" : "#333",
+              padding: "18px 12px",
+              background: joinMode === "participant" ? "#7c4dff" : "#2a2a2a",
               border:
                 joinMode === "participant"
-                  ? "2px solid #7c4dff"
+                  ? "2px solid #9d7aff"
                   : "2px solid #444",
-              borderRadius: 8,
+              borderRadius: 12,
               color: "#fff",
               cursor: "pointer",
+              textAlign: "center",
             }}
           >
-            🎤 Participante
+            <div style={{ fontSize: "1.6rem", marginBottom: 8 }}>🎤</div>
+            <div style={{ fontWeight: 600, fontSize: "1.05rem" }}>
+              Quero cantar
+            </div>
+            <div
+              style={{
+                fontSize: "0.82rem",
+                color: "#ccc",
+                marginTop: 8,
+                lineHeight: 1.4,
+              }}
+            >
+              Escolher músicas e<br />
+              acompanhar a fila
+            </div>
           </button>
           <button
             onClick={() => setJoinMode("tv")}
             style={{
               flex: 1,
-              padding: "12px",
-              background: joinMode === "tv" ? "#7c4dff" : "#333",
+              padding: "18px 12px",
+              background: joinMode === "tv" ? "#7c4dff" : "#2a2a2a",
               border:
-                joinMode === "tv" ? "2px solid #7c4dff" : "2px solid #444",
-              borderRadius: 8,
+                joinMode === "tv" ? "2px solid #9d7aff" : "2px solid #444",
+              borderRadius: 12,
               color: "#fff",
               cursor: "pointer",
+              textAlign: "center",
             }}
           >
-            📺 TV
+            <div style={{ fontSize: "1.6rem", marginBottom: 8 }}>🖥️</div>
+            <div style={{ fontWeight: 600, fontSize: "1.05rem" }}>
+              Exibir na tela
+            </div>
+            <div
+              style={{
+                fontSize: "0.82rem",
+                color: "#ccc",
+                marginTop: 8,
+                lineHeight: 1.4,
+              }}
+            >
+              Mostrar vídeo e letra
+              <br />
+              para todos verem
+            </div>
           </button>
         </div>
 
@@ -705,7 +743,7 @@ export default function Home() {
             onClick={e => e.stopPropagation()}
           >
             <h3 style={{ margin: "0 0 8px", textAlign: "center" }}>
-              📺 Modo TV - Sala {pendingRoomCode}
+              🔐 Senha da sala
             </h3>
             <p
               style={{
@@ -715,7 +753,8 @@ export default function Home() {
                 fontSize: "0.9rem",
               }}
             >
-              Digite a senha da TV para acessar (6 caracteres)
+              Digite a senha para abrir a exibição na sala{" "}
+              <strong>{pendingRoomCode}</strong>
             </p>
 
             {tvPasswordError && (
