@@ -399,7 +399,6 @@ export default function RoomTV() {
   // Auto-finalize when YouTube video ends
   const handleVideoEnd = useCallback(async () => {
     if (!code) return;
-    console.log("[TV] Video ended, auto-finalizing");
     try {
       await finalizeSong(code, "Auto");
     } catch (err) {
@@ -431,13 +430,10 @@ export default function RoomTV() {
     if (!code || !authChecked) return;
 
     const tvToken = localStorage.getItem(`tvToken_${code}`);
-    const startTime = performance.now();
 
     // Fallback: fetch state via HTTP in case WS is slow
     getState(code)
       .then(s => {
-        const elapsed = Math.round(performance.now() - startTime);
-        console.log(`[TV] HTTP state received in ${elapsed}ms`, s);
         if (s && s.error === "room_not_found") {
           setError("Sala não encontrada. Verifique o código.");
         } else if (s && !s.error) {
@@ -473,11 +469,8 @@ export default function RoomTV() {
         } else if (m.type === "ERROR" && m.error === "room_not_found") {
           setError("Sala não encontrada. Verifique o código.");
         } else if (m.type === "FINALIZED") {
-          console.log("[TV] FINALIZED", m);
           setFinalized({ singer: m.singer!, score: m.score!, title: m.title! });
         } else if (m.type === "PLAYER_COMMAND") {
-          // Remote control from mobile
-          console.log("[TV] PLAYER_COMMAND", m.action);
           if (playerRef.current) {
             if (m.action === "play") {
               playerRef.current.playVideo();
@@ -496,26 +489,13 @@ export default function RoomTV() {
 
   // Create / destroy YouTube player
   useEffect(() => {
-    console.log("[TV] Player effect", {
-      ytReady,
-      videoId,
-      showScore,
-      hasContainer: !!playerContainerRef.current,
-    });
-
     // Cleanup old player when videoId changes or score shown
     if (playerRef.current) {
-      console.log("[TV] Destroying old player");
       playerRef.current.destroy();
       playerRef.current = null;
     }
 
     if (!ytReady || !videoId || showScore) {
-      console.log("[TV] Skipping player creation", {
-        ytReady,
-        videoId,
-        showScore,
-      });
       return;
     }
 
@@ -523,11 +503,8 @@ export default function RoomTV() {
     const timeoutId = setTimeout(() => {
       const container = playerContainerRef.current;
       if (!container) {
-        console.log("[TV] Container not found, retrying...");
         return;
       }
-
-      console.log("[TV] Creating player for", videoId);
 
       // Clear container
       container.innerHTML = "";
@@ -549,12 +526,9 @@ export default function RoomTV() {
         },
         events: {
           onReady: e => {
-            console.log("[TV] Player ready, calling playVideo");
-            // Force play on ready (some browsers block autoplay)
             e.target.playVideo();
           },
           onStateChange: e => {
-            console.log("[TV] Player state changed", e.data);
             if (e.data === window.YT!.PlayerState.ENDED) {
               handleVideoEnd();
             }
@@ -783,7 +757,14 @@ export default function RoomTV() {
               loading="lazy"
               style={{ width: 80, height: 80, display: "block" }}
             />
-            <div style={{ color: "#000", fontSize: "0.65rem", fontWeight: 600, marginTop: 4 }}>
+            <div
+              style={{
+                color: "#000",
+                fontSize: "0.65rem",
+                fontWeight: 600,
+                marginTop: 4,
+              }}
+            >
               {code}
             </div>
           </div>

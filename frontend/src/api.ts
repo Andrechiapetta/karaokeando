@@ -238,7 +238,6 @@ export function connectWS(
     url = `${protocol}//${host}/ws/${roomCode}`;
   }
 
-  console.log("[WS] Connecting to", url);
   const ws = new WebSocket(url);
 
   ws.onopen = () => {
@@ -249,7 +248,6 @@ export function connectWS(
   ws.onmessage = event => {
     try {
       const msg = JSON.parse(event.data);
-      console.log("[WS] Received", msg.type, msg);
       onMessage(msg);
     } catch {
       // ignore
@@ -260,9 +258,7 @@ export function connectWS(
     console.error("[WS] Error", err);
   };
 
-  ws.onclose = e => {
-    console.log("[WS] Closed", e.code, e.reason);
-  };
+  ws.onclose = () => {};
 
   return ws;
 }

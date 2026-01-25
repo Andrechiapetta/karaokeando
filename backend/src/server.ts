@@ -54,6 +54,7 @@ interface DuetRankingEntry {
 interface RoomState {
   code: string;
   createdAt: number;
+  lastActivityAt: number; // timestamp da última atividade (pra cleanup)
   nowPlaying: QueueItem | null;
   queue: QueueItem[];
   ranking: Record<string, RankingEntry | number>; // odUserId -> { name, score } OR old format name -> score
@@ -77,8 +78,64 @@ const rooms = new Map<string, RoomState>();
 const connections = new Map<string, RoomConnections>();
 
 // ─────────────────────────────────────────────────────────────
+// Cleanup automático de salas inativas (on/off dinâmico)
+// ─────────────────────────────────────────────────────────────
+
+const CLEANUP_INTERVAL_MS = 30 * 60 * 1000; // 30 minutos
+const INACTIVE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 horas
+
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
+
+function startCleanupIfNeeded() {
+  if (cleanupIntervalId === null && rooms.size > 0) {
+    cleanupIntervalId = setInterval(runCleanup, CLEANUP_INTERVAL_MS);
+  }
+}
+
+function stopCleanupIfEmpty() {
+  if (cleanupIntervalId !== null && rooms.size === 0) {
+    clearInterval(cleanupIntervalId);
+    cleanupIntervalId = null;
+  }
+}
+
+function runCleanup() {
+  const now = Date.now();
+
+  for (const [code, room] of rooms) {
+    const conns = connections.get(code);
+    const hasConnections =
+      conns && (conns.tv.size > 0 || conns.mobile.size > 0);
+    const isInactive = now - room.lastActivityAt > INACTIVE_THRESHOLD_MS;
+
+    // Limpa se: ninguém conectado E inativo há mais de threshold
+    if (!hasConnections && isInactive) {
+      rooms.delete(code);
+      connections.delete(code);
+    }
+  }
+
+  // Se não sobrou nenhuma sala, para o cleanup
+  stopCleanupIfEmpty();
+}
+
+// Helper para adicionar sala e iniciar cleanup se necessário
+function addRoom(code: string, room: RoomState) {
+  rooms.set(code, room);
+  startCleanupIfNeeded();
+}
+
+// ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
+
+// Atualiza timestamp de última atividade da sala
+function touchRoom(roomCode: string) {
+  const room = rooms.get(roomCode);
+  if (room) {
+    room.lastActivityAt = Date.now();
+  }
+}
 
 function makeRoomCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -273,6 +330,7 @@ async function getOrRestoreRoom(roomCode: string): Promise<RoomState | null> {
     room = {
       code: dbRoom.code,
       createdAt: dbRoom.createdAt.getTime(),
+      lastActivityAt: Date.now(),
       nowPlaying: null,
       queue: [],
       ranking: {},
@@ -280,7 +338,7 @@ async function getOrRestoreRoom(roomCode: string): Promise<RoomState | null> {
       lastFinalizeMs: 0,
       showingScore: false,
     };
-    rooms.set(code, room);
+    addRoom(code, room);
     connections.set(code, {
       tv: new Set(),
       mobile: new Set(),
@@ -320,9 +378,10 @@ setRoomCallbacks({
   onRoomCreated: (roomCode: string, ownerId: string) => {
     // Create in-memory state for the room
     if (!rooms.has(roomCode)) {
-      rooms.set(roomCode, {
+      addRoom(roomCode, {
         code: roomCode,
         createdAt: Date.now(),
+        lastActivityAt: Date.now(),
         nowPlaying: null,
         queue: [],
         ranking: {},
@@ -382,6 +441,7 @@ app.post<{
 }>("/api/rooms/:roomCode/enqueue", async (req, reply) => {
   const room = await getOrRestoreRoom(req.params.roomCode);
   if (!room) return reply.code(404).send({ error: "room_not_found" });
+  touchRoom(req.params.roomCode);
 
   const videoId = (req.body.videoId || "").trim();
   const title = (req.body.title || "").trim() || "(sem título)";
@@ -423,6 +483,7 @@ app.post<{ Params: { roomCode: string } }>(
   async (req, reply) => {
     const room = await getOrRestoreRoom(req.params.roomCode);
     if (!room) return reply.code(404).send({ error: "room_not_found" });
+    touchRoom(req.params.roomCode);
 
     room.nowPlaying = room.queue.shift() || null;
     broadcast(room.code, { type: "STATE", state: getRoomState(room) });
@@ -528,6 +589,7 @@ app.post<{ Params: { roomCode: string }; Body: { requester?: string } }>(
   async (req, reply) => {
     const room = await getOrRestoreRoom(req.params.roomCode);
     if (!room) return reply.code(404).send({ error: "room_not_found" });
+    touchRoom(req.params.roomCode);
 
     const requester = (req.body.requester || "").trim() || "Convidado";
     const now = Date.now();
@@ -748,6 +810,7 @@ app.post<{ Params: { roomCode: string }; Body: { action: string } }>(
   async (req, reply) => {
     const room = await getOrRestoreRoom(req.params.roomCode);
     if (!room) return reply.code(404).send({ error: "room_not_found" });
+    touchRoom(req.params.roomCode);
 
     const action = req.body.action; // 'play' | 'pause'
     if (!["play", "pause"].includes(action)) {
@@ -790,14 +853,8 @@ async function searchWithYtDlp(query: string): Promise<YouTubeSearchResult[]> {
   const safeQuery = query.replace(/[`$\\]/g, "\\$&").replace(/"/g, '\\"');
   const cmd = `yt-dlp -j --no-playlist --flat-playlist "ytsearch${numResults}:${safeQuery}"`;
 
-  console.log("[yt-dlp] Running search command:", cmd);
-
   try {
     const { stdout, stderr } = await execAsync(cmd, { timeout: 30000 }); // 30s timeout
-
-    if (stderr) {
-      console.log("[yt-dlp] stderr:", stderr);
-    }
 
     const results: YouTubeSearchResult[] = [];
     for (const line of stdout.split("\n")) {
@@ -816,10 +873,8 @@ async function searchWithYtDlp(query: string): Promise<YouTubeSearchResult[]> {
       }
     }
 
-    console.log("[yt-dlp] Found", results.length, "results");
     return results;
-  } catch (err) {
-    console.error("[yt-dlp] Search failed:", err);
+  } catch {
     return [];
   }
 }
@@ -987,6 +1042,7 @@ app.get<{ Params: { roomCode: string } }>(
         const msg = JSON.parse(raw.toString());
         if (msg.type === "HELLO") {
           const conns = connections.get(roomCode)!;
+          touchRoom(roomCode); // Marca atividade na sala
 
           // New auth flow: token-based
           if (msg.token) {

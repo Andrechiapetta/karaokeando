@@ -475,7 +475,6 @@ export default function RoomMobile() {
         if (s && s.error === "room_not_found") {
           setError("Sala não encontrada. Verifique o código.");
         } else if (s && !s.error) {
-          console.log("[Mobile] HTTP state fallback", s);
           setState(s);
         }
       })
@@ -505,16 +504,8 @@ export default function RoomMobile() {
             return m.state!;
           });
         } else if (m.type === "PARTICIPANTS" && m.participants) {
-          console.log("[Mobile] PARTICIPANTS received", m.participants);
           setParticipants(m.participants);
         } else if (m.type === "NICKNAME_ASSIGNED" && m.nickname) {
-          // Server assigned a (possibly modified) nickname
-          console.log(
-            "[Mobile] Nickname assigned:",
-            m.nickname,
-            "was modified:",
-            m.wasModified
-          );
           setNickname(m.nickname);
           if (m.wasModified) {
             // Show a brief toast notification that name was changed
@@ -546,7 +537,6 @@ export default function RoomMobile() {
     getParticipants(code)
       .then(data => {
         if (data.participants) {
-          console.log("[Mobile] Initial HTTP participants", data.participants);
           setParticipants(data.participants);
         }
       })
@@ -666,8 +656,7 @@ export default function RoomMobile() {
         setSearchError("Nenhum resultado encontrado no YouTube.");
       }
       setSearchResults(results);
-    } catch (err) {
-      console.error("Search error:", err);
+    } catch {
       setSearchError("Erro na busca. Tente novamente.");
     }
     setSearching(false);

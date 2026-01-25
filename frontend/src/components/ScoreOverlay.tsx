@@ -8,7 +8,16 @@ import { launchFireworkShow } from "../score/fireworks";
 import "./ScoreOverlay.css";
 
 const IconMic = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
     <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
     <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -37,7 +46,7 @@ export default function ScoreOverlay({
   const [scoreText, setScoreText] = useState("");
   const [reviewText, setReviewText] = useState("");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  
+
   // Store onDone in a ref to avoid re-triggering effect when callback changes
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
@@ -52,18 +61,11 @@ export default function ScoreOverlay({
         typeof scoreOverride === "number" ? scoreOverride : getScoreValue();
       const scoreData = getScoreData(scoreValue, singer);
 
-      console.log("[ScoreOverlay] open", { scoreValue, enableAudio, singer });
-
       setReviewText("");
       setScoreText("");
 
       const drums = new Audio("/sounds/score-drums.mp3");
       const applause = new Audio(`/sounds/${scoreData.applause}`);
-
-      drums.onerror = () =>
-        console.warn("[ScoreOverlay] missing /sounds/score-drums.mp3");
-      applause.onerror = () =>
-        console.warn(`[ScoreOverlay] missing /sounds/${scoreData.applause}`);
 
       // PiKaraoke settings
       drums.volume = 0.3;
@@ -115,7 +117,17 @@ export default function ScoreOverlay({
       <div className="pk-score__number">{scoreText}</div>
       <div className="pk-score__review">
         {singer ? (
-          <div style={{ fontSize: "2rem", marginBottom: 8, opacity: 0.9, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          <div
+            style={{
+              fontSize: "2rem",
+              marginBottom: 8,
+              opacity: 0.9,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+            }}
+          >
             <IconMic size={28} /> {singer}
           </div>
         ) : null}
