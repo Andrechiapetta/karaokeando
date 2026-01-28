@@ -9,6 +9,7 @@ interface MyRoom {
 }
 
 export default function Home() {
+  // teste
   const navigate = useNavigate();
   const { user, loading: authLoading, logout, registerGuest } = useAuth();
 
